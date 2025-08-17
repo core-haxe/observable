@@ -187,19 +187,12 @@ class ObservableBuilder {
                 name: "notifyChanged",
                 access: [APrivate, ADynamic],
                 kind: FFun({
-                    args:[{
-                        name: "source",
-                        type: macro: Any
-                    }, {
-                        name: "field",
-                        type: macro: String
-                    }, {
-                        name: "newValue",
-                        type: macro: Any
-                    }, {
-                        name: "oldValue",
-                        type: macro: Any
-                    }],
+                    args:[
+                        { name: "source", type: macro: Any},
+                        { name: "field", type: macro: String},
+                        { name: "newValue", type: macro: Any},
+                        { name: "oldValue", type: macro: Any}
+                    ],
                     expr: macro {}
                 }),
                 pos: Context.currentPos()
@@ -437,9 +430,7 @@ class ObservableBuilder {
             case FVar(t, e):
                 switch (t) {
                     case TPath(p): p.name == "Array" || p.name == "ObservableArray";
-                    case _:
-                        trace(t);
-                        false;
+                    case _: false;
                 }
             case _: false;
         }
@@ -450,9 +441,7 @@ class ObservableBuilder {
             case FVar(t, e):
                 switch (t) {
                     case TPath(p): p.name == "Map" || p.name == "ObservableMap";
-                    case _:
-                        trace(t);
-                        false;
+                    case _: false;
                 }
             case _: false;
         }
