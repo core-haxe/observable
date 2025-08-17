@@ -1,0 +1,8 @@
+--class-path .
+--main TestAll
+
+-lib utest
+-lib observable
+
+-lib hxnodejs
+-D no-deprecation-warnings

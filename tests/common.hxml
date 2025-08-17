@@ -1,0 +1,9 @@
+--class-path .
+--main TestAll
+
+-lib utest
+-lib entities2
+-lib db-sqlite
+-lib db-mysql
+
+-D no-deprecation-warnings

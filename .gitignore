@@ -1,0 +1,5 @@
+build/
+*.db
+.vscode/
+.unittest/
+dump/
