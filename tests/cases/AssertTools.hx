@@ -28,8 +28,8 @@ class AssertTools {
                     found = change;
                     break;
                 }
-                foundIndex++;
             }
+            foundIndex++;
         }
         return found;
     }

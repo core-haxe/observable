@@ -19,10 +19,8 @@ class TestAll {
     }
 
     private static function addBasicCases(runner:Runner) {
-        /*
         runner.addCase(new cases.basic.TestBasic());
         runner.addCase(new cases.basic.TestSubObject());
-        */
         runner.addCase(new cases.basic.TestArray());
         runner.addCase(new cases.basic.TestMap());
     }

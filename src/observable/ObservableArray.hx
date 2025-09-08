@@ -10,6 +10,11 @@ abstract ObservableArray<T>(ObservableArrayImpl<T>) {
         return this.get(index);
     }
 
+    @:arrayAccess
+    public inline function set(index:Int, value:T) {
+        return this.set(index, value);
+    }
+
     @:from
     private static inline function fromArray<T>(array:Array<T>):ObservableArray<T> {
         var observableArray = new ObservableArray();
@@ -40,6 +45,23 @@ class ObservableArrayImpl<T> implements IObservable {
 
     public function get(index:Int) {
         return _array[index];
+    }
+
+    public function set(index:Int, item:T) {
+        if (item is IObservable) {
+            @:privateAccess cast(item, IObservable).notifyChanged = this.notifyChanged;
+            @:privateAccess cast(item, IObservable).changeListeners = this.changeListeners;
+        }
+        _array[index] = item;
+        notifyChanged(this, _fieldName, item, null);
+    }
+
+    public function remove(item:T) {
+        var found = _array.remove(item);
+        if (found) {
+            notifyChanged(this, _fieldName, item, null);
+        }
+        return found;
     }
 
     public function push(item:T) {
