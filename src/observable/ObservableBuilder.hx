@@ -1,6 +1,7 @@
 package observable;
 
 #if macro
+import haxe.macro.Compiler;
 import haxe.macro.Expr.Field;
 import haxe.macro.Expr;
 import haxe.macro.Context;
@@ -263,6 +264,16 @@ class ObservableBuilder {
     }
 
     private static function buildObservableProperties(fields:Array<Field>):Array<String> {
+        var allowPublic:Bool = true;
+        var allowPrivate:Bool = true;
+        var defines = Context.getDefines();
+        if (defines.exists("observable.defaults.public")) {
+            allowPublic = (defines.get("observable.defaults.public") == "observed");
+        }
+        if (defines.exists("observable.defaults.private")) {
+            allowPrivate = (defines.get("observable.defaults.private") == "observed");
+        }
+
         var fieldsToAdd:Array<Field> = [];
         var fieldsToRemove:Array<Field> = [];
         var observableSubObjects:Array<String> = [];
@@ -271,6 +282,23 @@ class ObservableBuilder {
             if (field.name == "groupObservableChanges" || field.name == "changesToNotify" || field.name == "waitingForTick" || field.name == "_changeListeners") {
                 continue;
             }
+
+            var useField = true;
+            if (!allowPublic && field.access.contains(APublic)) {
+                useField = false;
+            }
+            if (!allowPrivate && field.access.contains(APrivate)) {
+                useField = false;
+            }
+
+            if (hasMeta("observable", field.meta)) {
+                useField = true;
+            }
+
+            if (!useField) {
+                continue;
+            }
+
             switch (field.kind) {
                 case FVar(t, e):
                     fieldsToRemove.push(field);
@@ -468,6 +496,18 @@ class ObservableBuilder {
                 }
             case _:
                 return false;
+        }
+        return false;
+    }
+
+    private static function hasMeta(name:String, meta:Metadata) {
+        if (meta == null) {
+            return false;
+        }
+        for (m in meta) {
+            if (m.name == name || m.name == ":" + name) {
+                return true;
+            }
         }
         return false;
     }

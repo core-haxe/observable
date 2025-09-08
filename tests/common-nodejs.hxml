@@ -6,3 +6,6 @@
 
 -lib hxnodejs
 -D no-deprecation-warnings
+
+-D observable.defaults.public=observed
+-D observable.defaults.private=unobserved
