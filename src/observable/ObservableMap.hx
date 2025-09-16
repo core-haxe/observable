@@ -16,7 +16,16 @@ abstract ObservableMap<K, V>(ObservableMapImpl<K, V>) {
         @:privateAccess observableMap._map = map;
         return observableMap;
     }
-   
+ 
+    /*
+	@:from
+    private static macro function fromEmptyArray(e) {
+		return switch haxe.macro.Context.typeExpr(e).expr {
+			case TArrayDecl([]): macro new Foo();
+			case _: e;
+		}
+	}
+    */    
 }
 
 class ObservableMapImpl<K, V> implements IObservable {
