@@ -1,5 +1,6 @@
 package observable;
 
+import haxe.macro.TypeTools;
 #if macro
 import haxe.macro.Compiler;
 import haxe.macro.Expr.Field;
@@ -38,6 +39,7 @@ class ObservableBuilder {
                 return f;
             }
         }
+
         return null;
     }
 
@@ -62,204 +64,226 @@ class ObservableBuilder {
     }
 
     private static function buildVars(fields:Array<Field>) {
-        var changesToNotify = getField("changesToNotify", fields);
-        if (changesToNotify == null) {
-            changesToNotify = {
-                name: "changesToNotify",
-                access: [APrivate],
-                kind: FVar(macro: Array<observable.ChangeInfo<Any>>, macro []),
-                pos: Context.currentPos()
+        var existingChangesToNotify = TypeTools.findField(Context.getLocalClass().get(), "changesToNotify");
+        trace(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ", existingChangesToNotify == null);
+        if (existingChangesToNotify == null) {
+            var changesToNotify = getField("changesToNotify", fields);
+            if (changesToNotify == null) {
+                changesToNotify = {
+                    name: "changesToNotify",
+                    access: [APrivate],
+                    kind: FVar(macro: Array<observable.ChangeInfo<Any>>, macro []),
+                    pos: Context.currentPos()
+                }
+                fields.push(changesToNotify);
             }
-            fields.push(changesToNotify);
         }
 
-        var waitingForTick = getField("waitingForTick", fields);
-        if (waitingForTick == null) {
-            waitingForTick = {
-                name: "waitingForTick",
-                access: [APrivate],
-                kind: FVar(macro: Bool, macro false),
-                pos: Context.currentPos()
+        var existingWaitingForTick = TypeTools.findField(Context.getLocalClass().get(), "waitingForTick");
+        if (existingWaitingForTick == null) {
+            var waitingForTick = getField("waitingForTick", fields);
+            if (waitingForTick == null) {
+                waitingForTick = {
+                    name: "waitingForTick",
+                    access: [APrivate],
+                    kind: FVar(macro: Bool, macro false),
+                    pos: Context.currentPos()
+                }
+                fields.push(waitingForTick);
             }
-            fields.push(waitingForTick);
         }
 
-        var groupObservableChanges = getField("groupObservableChanges", fields);
-        if (groupObservableChanges == null) {
-            groupObservableChanges = {
-                name: "groupObservableChanges",
-                access: [APublic],
-                kind: FVar(macro: Bool, macro observable.ObservableDefaults.GroupChanges),
-                pos: Context.currentPos()
+        var existingGroupObservableChanges = TypeTools.findField(Context.getLocalClass().get(), "groupObservableChanges");
+        if (existingGroupObservableChanges == null) {
+            var groupObservableChanges = getField("groupObservableChanges", fields);
+            if (groupObservableChanges == null) {
+                groupObservableChanges = {
+                    name: "groupObservableChanges",
+                    access: [APublic],
+                    kind: FVar(macro: Bool, macro observable.ObservableDefaults.GroupChanges),
+                    pos: Context.currentPos()
+                }
+                fields.push(groupObservableChanges);
             }
-            fields.push(groupObservableChanges);
         }
     }
 
     private static function buildChangeListeners(fields:Array<Field>, observableSubObjects:Array<String>) {
-        var _changeListeners = getField("_changeListeners", fields);
-        if (_changeListeners == null) {
-            _changeListeners = {
-                name: "_changeListeners",
-                access: [APrivate],
-                kind: FVar(macro: Array<Array<observable.ChangeInfo<Any>>->Void>, macro []),
-                pos: Context.currentPos()
+        var existing_changeListeners = TypeTools.findField(Context.getLocalClass().get(), "_changeListeners");
+        if (existing_changeListeners == null) {
+            var _changeListeners = getField("_changeListeners", fields);
+            if (_changeListeners == null) {
+                _changeListeners = {
+                    name: "_changeListeners",
+                    access: [APrivate],
+                    kind: FVar(macro: Array<Array<observable.ChangeInfo<Any>>->Void>, macro []),
+                    pos: Context.currentPos()
+                }
+                fields.push(_changeListeners);
             }
-            fields.push(_changeListeners);
-        }
 
-        var changeListeners = getField("changeListeners", fields);
-        if (changeListeners == null) {
-            changeListeners = {
-                name: "changeListeners",
-                access: [APrivate],
-                kind: FProp("get", "set", macro: Array<Array<observable.ChangeInfo<Any>>->Void>),
-                pos: Context.currentPos()
+            var changeListeners = getField("changeListeners", fields);
+            if (changeListeners == null) {
+                changeListeners = {
+                    name: "changeListeners",
+                    access: [APrivate],
+                    kind: FProp("get", "set", macro: Array<Array<observable.ChangeInfo<Any>>->Void>),
+                    pos: Context.currentPos()
+                }
+                fields.push(changeListeners);
             }
-            fields.push(changeListeners);
-        }
 
-        var get_changeListeners = getField("get_changeListeners", fields);
-        if (get_changeListeners == null) {
-            get_changeListeners = {
-                name: "get_changeListeners",
-                access: [APrivate],
-                kind: FFun({
-                    args:[],
-                    expr: macro {
-                        return _changeListeners;
-                    }
-                }),
-                pos: Context.currentPos()
-            }
-            fields.push(get_changeListeners);
-        }
-
-        var set_changeListeners = getField("set_changeListeners", fields);
-        if (set_changeListeners == null) {
-            var exprs:Array<Expr> = [];
-            for (observableSubObject in observableSubObjects) {
-                exprs.push(macro {
-                    if ($i{observableSubObject} != null) {
-                        @:privateAccess $i{observableSubObject}.notifyChanged = this.notifyChanged;
-                        @:privateAccess $i{observableSubObject}.changeListeners = value;
-                    }
-                });
-            }
-            set_changeListeners = {
-                name: "set_changeListeners",
-                access: [APrivate],
-                kind: FFun({
-                    args:[{ name: "value", type: macro: Array<Array<observable.ChangeInfo<Any>>->Void>}],
-                    expr: macro {
-                        _changeListeners = value;
-                        {
-                            $a{exprs}
+            var get_changeListeners = getField("get_changeListeners", fields);
+            if (get_changeListeners == null) {
+                get_changeListeners = {
+                    name: "get_changeListeners",
+                    access: [APrivate],
+                    kind: FFun({
+                        args:[],
+                        expr: macro {
+                            return _changeListeners;
                         }
-                        return value;
-                    }
-                }),
-                pos: Context.currentPos()
+                    }),
+                    pos: Context.currentPos()
+                }
+                fields.push(get_changeListeners);
             }
-            fields.push(set_changeListeners);
+
+            var set_changeListeners = getField("set_changeListeners", fields);
+            if (set_changeListeners == null) {
+                var exprs:Array<Expr> = [];
+                for (observableSubObject in observableSubObjects) {
+                    exprs.push(macro {
+                        if ($i{observableSubObject} != null) {
+                            @:privateAccess $i{observableSubObject}.notifyChanged = this.notifyChanged;
+                            @:privateAccess $i{observableSubObject}.changeListeners = value;
+                        }
+                    });
+                }
+                set_changeListeners = {
+                    name: "set_changeListeners",
+                    access: [APrivate],
+                    kind: FFun({
+                        args:[{ name: "value", type: macro: Array<Array<observable.ChangeInfo<Any>>->Void>}],
+                        expr: macro {
+                            _changeListeners = value;
+                            {
+                                $a{exprs}
+                            }
+                            return value;
+                        }
+                    }),
+                    pos: Context.currentPos()
+                }
+                fields.push(set_changeListeners);
+            }
         }
 
-        var registerChangeListener = getField("registerChangeListener", fields);
-        if (registerChangeListener == null) {
-            registerChangeListener = {
-                name: "registerChangeListener",
-                access: [APublic],
-                kind: FFun({
-                    args:[{ name: "listener", type: macro: Array<observable.ChangeInfo<Any>>->Void}],
-                    expr: macro {
-                        _changeListeners.push(listener);
-                    }
-                }),
-                pos: Context.currentPos()
+        var existingRegisterChangeListener = TypeTools.findField(Context.getLocalClass().get(), "registerChangeListener");
+        if (existingRegisterChangeListener == null) {
+            var registerChangeListener = getField("registerChangeListener", fields);
+            if (registerChangeListener == null) {
+                registerChangeListener = {
+                    name: "registerChangeListener",
+                    access: [APublic],
+                    kind: FFun({
+                        args:[{ name: "listener", type: macro: Array<observable.ChangeInfo<Any>>->Void}],
+                        expr: macro {
+                            _changeListeners.push(listener);
+                        }
+                    }),
+                    pos: Context.currentPos()
+                }
+                fields.push(registerChangeListener);
             }
-            fields.push(registerChangeListener);
         }
     }
 
     private static function buildNotifyChanged(fields:Array<Field>) {
-        var notifyChanged = getField("notifyChanged", fields);
-        if (notifyChanged == null) {
-            notifyChanged = {
-                name: "notifyChanged",
-                access: [APrivate, ADynamic],
-                kind: FFun({
-                    args:[
-                        { name: "source", type: macro: Any},
-                        { name: "field", type: macro: String},
-                        { name: "newValue", type: macro: Any},
-                        { name: "oldValue", type: macro: Any}
-                    ],
-                    expr: macro {}
-                }),
-                pos: Context.currentPos()
+        var existingNotifyChanged = TypeTools.findField(Context.getLocalClass().get(), "notifyChanged");
+        if (existingNotifyChanged == null) {
+            var notifyChanged = getField("notifyChanged", fields);
+            if (notifyChanged == null) {
+                notifyChanged = {
+                    name: "notifyChanged",
+                    access: [APrivate, ADynamic],
+                    kind: FFun({
+                        args:[
+                            { name: "source", type: macro: Any},
+                            { name: "field", type: macro: String},
+                            { name: "newValue", type: macro: Any},
+                            { name: "oldValue", type: macro: Any}
+                        ],
+                        expr: macro {}
+                    }),
+                    pos: Context.currentPos()
+                }
+                fields.push(notifyChanged);
             }
-            fields.push(notifyChanged);
-        }
 
-        switch (notifyChanged.kind) {
-            case FFun(f):
-                f.expr = macro {
-                    if (groupObservableChanges) {
-                        changesToNotify.push({
-                            timestamp: Date.now().getTime(),
-                            source: source,
-                            field: field,
-                            newValue: newValue,
-                            oldValue: oldValue
-                        });
-                        if (!waitingForTick) {
-                            waitingForTick = true;
-                            observable.ObservableDefaults.onTick(onTick);
-                        }
-                    } else {
-                        if (changeListeners != null) {
-                            for (listener in changeListeners) {
-                                listener([{
-                                    timestamp: Date.now().getTime(),
-                                    source: source,
-                                    field: field,
-                                    newValue: newValue,
-                                    oldValue: oldValue
-                                }]);
+            switch (notifyChanged.kind) {
+                case FFun(f):
+                    f.expr = macro {
+                        if (groupObservableChanges) {
+                            changesToNotify.push({
+                                timestamp: Date.now().getTime(),
+                                source: source,
+                                field: field,
+                                newValue: newValue,
+                                oldValue: oldValue
+                            });
+                            if (!waitingForTick) {
+                                waitingForTick = true;
+                                observable.ObservableDefaults.onTick(onTick);
+                            }
+                        } else {
+                            if (changeListeners != null) {
+                                for (listener in changeListeners) {
+                                    listener([{
+                                        timestamp: Date.now().getTime(),
+                                        source: source,
+                                        field: field,
+                                        newValue: newValue,
+                                        oldValue: oldValue
+                                    }]);
+                                }
                             }
                         }
                     }
-                }
-            case _:
+                case _:
+            }
         }
     }
 
     private static function buildOnTick(fields:Array<Field>) {
-        var onTick = getField("onTick", fields);
-        if (onTick == null) {
-            onTick = {
-                name: "onTick",
-                access: [APrivate],
-                kind: FFun({
-                    args:[],
-                    expr: macro {}
-                }),
-                pos: Context.currentPos()
-            }
-            fields.push(onTick);
-        }
-
-        switch (onTick.kind) {
-            case FFun(f):
-                f.expr = macro {
-                    var copy = changesToNotify.copy();
-                    changesToNotify = [];
-                    waitingForTick = false;
-                    for (listener in changeListeners) {
-                        listener(copy);
-                    }
+        var existingOnTick = TypeTools.findField(Context.getLocalClass().get(), "onTick");
+        if (existingOnTick == null) {
+            var onTick = getField("onTick", fields);
+            if (onTick == null) {
+                onTick = {
+                    name: "onTick",
+                    access: [APrivate],
+                    kind: FFun({
+                        args:[],
+                        expr: macro {}
+                    }),
+                    pos: Context.currentPos()
                 }
-            case _:
+                fields.push(onTick);
+            }
+
+            switch (onTick.kind) {
+                case FFun(f):
+                    f.expr = macro {
+                        var copy = changesToNotify.copy();
+                        changesToNotify = [];
+                        waitingForTick = false;
+                        for (listener in changeListeners) {
+                            listener(copy);
+                        }
+                    }
+                case _:
+            }
         }
     }
 
