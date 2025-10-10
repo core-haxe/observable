@@ -65,7 +65,6 @@ class ObservableBuilder {
 
     private static function buildVars(fields:Array<Field>) {
         var existingChangesToNotify = TypeTools.findField(Context.getLocalClass().get(), "changesToNotify");
-        trace(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ", existingChangesToNotify == null);
         if (existingChangesToNotify == null) {
             var changesToNotify = getField("changesToNotify", fields);
             if (changesToNotify == null) {
@@ -116,7 +115,7 @@ class ObservableBuilder {
                 _changeListeners = {
                     name: "_changeListeners",
                     access: [APrivate],
-                    kind: FVar(macro: Array<Array<observable.ChangeInfo<Any>>->Void>, macro []),
+                    kind: FVar(macro: Array<observable.Changes->Void>, macro []),
                     pos: Context.currentPos()
                 }
                 fields.push(_changeListeners);
@@ -127,7 +126,7 @@ class ObservableBuilder {
                 changeListeners = {
                     name: "changeListeners",
                     access: [APrivate],
-                    kind: FProp("get", "set", macro: Array<Array<observable.ChangeInfo<Any>>->Void>),
+                    kind: FProp("get", "set", macro: Array<observable.Changes->Void>),
                     pos: Context.currentPos()
                 }
                 fields.push(changeListeners);
@@ -164,7 +163,7 @@ class ObservableBuilder {
                     name: "set_changeListeners",
                     access: [APrivate],
                     kind: FFun({
-                        args:[{ name: "value", type: macro: Array<Array<observable.ChangeInfo<Any>>->Void>}],
+                        args:[{ name: "value", type: macro: Array<observable.Changes->Void>}],
                         expr: macro {
                             _changeListeners = value;
                             {
@@ -187,7 +186,7 @@ class ObservableBuilder {
                     name: "registerChangeListener",
                     access: [APublic],
                     kind: FFun({
-                        args:[{ name: "listener", type: macro: Array<observable.ChangeInfo<Any>>->Void}],
+                        args:[{ name: "listener", type: macro: observable.Changes->Void}],
                         expr: macro {
                             _changeListeners.push(listener);
                         }
@@ -239,13 +238,15 @@ class ObservableBuilder {
                         } else {
                             if (changeListeners != null) {
                                 for (listener in changeListeners) {
-                                    listener([{
+                                    var changes = new observable.Changes();
+                                    changes.items = [{
                                         timestamp: Date.now().getTime(),
                                         source: source,
                                         field: field,
                                         newValue: newValue,
                                         oldValue: oldValue
-                                    }]);
+                                    }];
+                                    listener(changes);
                                 }
                             }
                         }
@@ -278,8 +279,10 @@ class ObservableBuilder {
                         var copy = changesToNotify.copy();
                         changesToNotify = [];
                         waitingForTick = false;
+                        var changes = new observable.Changes();
+                        changes.items = copy;
                         for (listener in changeListeners) {
-                            listener(copy);
+                            listener(changes);
                         }
                     }
                 case _:
