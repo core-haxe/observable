@@ -10,7 +10,7 @@ class TestSubObject extends Test {
     function test_Assignment(async:Async) {
         var o1 = new ObservableObjectA();
         o1.registerChangeListener((changes) -> {
-            Assert.equals(1, changes.length);
+            Assert.equals(1, changes.items.length);
             assertChangesContains(changes, o1, "subObjectA", o1.subObjectA, null);
             async.done();
         });
@@ -21,7 +21,7 @@ class TestSubObject extends Test {
     function test_Assignment_And_Set(async:Async) {
         var o1 = new ObservableObjectA();
         o1.registerChangeListener((changes) -> {
-            Assert.equals(3, changes.length);
+            Assert.equals(3, changes.items.length);
             assertChangesContains(changes, o1, "subObjectA", o1.subObjectA, null);
             assertChangesContains(changes, o1.subObjectA, "nullableIntValue", 111, null);
             assertChangesContains(changes, o1.subObjectA, "intValueWithDefault", 222, 111);
@@ -36,7 +36,7 @@ class TestSubObject extends Test {
     function test_Deeply_Nested_SubObjects(async:Async) {
         var o1 = new ObservableObjectA();
         o1.registerChangeListener((changes) -> {
-            Assert.equals(8, changes.length);
+            Assert.equals(8, changes.items.length);
             assertChangesContains(changes, o1, "subObjectA", o1.subObjectA, null);
             assertChangesContains(changes, o1.subObjectA, "subObjectA", o1.subObjectA.subObjectA, null);
             assertChangesContains(changes, o1.subObjectA.subObjectA, "subObjectA", o1.subObjectA.subObjectA.subObjectA, null);
@@ -61,7 +61,7 @@ class TestSubObject extends Test {
     function test_SubObject_With_Default(async:Async) {
         var o1 = new ObservableObjectA();
         o1.registerChangeListener((changes) -> {
-            Assert.equals(1, changes.length);
+            Assert.equals(1, changes.items.length);
             assertChangesContains(changes, o1.subObjectAWithDefault, "intValue", 555, 444);
             async.done();
         });

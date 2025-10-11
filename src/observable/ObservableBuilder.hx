@@ -1,5 +1,6 @@
 package observable;
 
+import haxe.macro.Type.ClassType;
 import haxe.macro.TypeTools;
 #if macro
 import haxe.macro.Compiler;
@@ -17,17 +18,17 @@ class ObservableBuilder {
 
         var fields = Context.getBuildFields();
 
-        buildConstructor(fields);
         buildVars(fields);
         buildNotifyChanged(fields);
         buildOnTick(fields);
 
-        var observableSubObjects:Array<String> = [];
+        var observableSubObjects:Array<{name:String, expr:Expr}> = [];
         if (Context.getLocalClass().get().name != "ObservableArrayImpl" && Context.getLocalClass().get().name != "ObservableMapImpl") {
             observableSubObjects = buildObservableProperties(fields);
         }
 
         buildChangeListeners(fields, observableSubObjects);
+        buildConstructor(fields, observableSubObjects);
 
         return fields;
     }
@@ -43,23 +44,60 @@ class ObservableBuilder {
         return null;
     }
 
-    private static function buildConstructor(fields:Array<Field>) {
+    private static function buildConstructor(fields:Array<Field>, observableSubObjects:Array<{name:String, expr:Expr}>) {
         var ctor = getField("new", fields);
+        var assignmentExprs:Array<Expr> = [];
+        for (observableSubObject in observableSubObjects) {
+            if (observableSubObject.expr != null) {
+                var varName = observableSubObject.name.substring(1);
+                var e = observableSubObject.expr;
+                assignmentExprs.push(macro $i{varName} = $e);
+            }
+        }
         if (ctor == null) {
-            ctor = {
-                name: "new",
-                access: [APublic],
-                kind: FFun({
-                    args:[],
-                    expr: macro {
-                        set_changeListeners(_changeListeners);
-                    }
-                }),
-                pos: Context.currentPos()
+            if (Context.getLocalClass().get().superClass != null) {
+                ctor = {
+                    name: "new",
+                    access: [APublic],
+                    kind: FFun({
+                        args:[],
+                        expr: macro {
+                            super();
+                            $a{assignmentExprs}
+                            set_changeListeners(_changeListeners);
+                        }
+                    }),
+                    pos: Context.currentPos()
+                }
+            } else {
+                ctor = {
+                    name: "new",
+                    access: [APublic],
+                    kind: FFun({
+                        args:[],
+                        expr: macro {
+                            $a{assignmentExprs}
+                            set_changeListeners(_changeListeners);
+                        }
+                    }),
+                    pos: Context.currentPos()
+                }
             }
             fields.push(ctor);
         } else {
             // TODO: if ctor exists, add 'set_changeListeners(_changeListeners)' to it
+            switch (ctor.kind) {
+                case FFun(f):
+                    switch (f.expr.expr) {
+                        case EBlock(exprs):
+                            exprs.insert(1, macro {
+                                $a{assignmentExprs}
+                                set_changeListeners(_changeListeners);
+                            });
+                        case _:    
+                    }
+                case _:    
+            }
         }
     }
 
@@ -107,7 +145,7 @@ class ObservableBuilder {
         }
     }
 
-    private static function buildChangeListeners(fields:Array<Field>, observableSubObjects:Array<String>) {
+    private static function buildChangeListeners(fields:Array<Field>, observableSubObjects:Array<{name:String, expr:Expr}>) {
         var existing_changeListeners = TypeTools.findField(Context.getLocalClass().get(), "_changeListeners");
         if (existing_changeListeners == null) {
             var _changeListeners = getField("_changeListeners", fields);
@@ -153,9 +191,9 @@ class ObservableBuilder {
                 var exprs:Array<Expr> = [];
                 for (observableSubObject in observableSubObjects) {
                     exprs.push(macro {
-                        if ($i{observableSubObject} != null) {
-                            @:privateAccess $i{observableSubObject}.notifyChanged = this.notifyChanged;
-                            @:privateAccess $i{observableSubObject}.changeListeners = value;
+                        if ($i{observableSubObject.name} != null) {
+                            @:privateAccess $i{observableSubObject.name}.notifyChanged = this.notifyChanged;
+                            @:privateAccess $i{observableSubObject.name}.changeListeners = value;
                         }
                     });
                 }
@@ -290,7 +328,7 @@ class ObservableBuilder {
         }
     }
 
-    private static function buildObservableProperties(fields:Array<Field>):Array<String> {
+    private static function buildObservableProperties(fields:Array<Field>):Array<{name:String, expr:Expr}> {
         var allowPublic:Bool = true;
         var allowPrivate:Bool = true;
         var defines = Context.getDefines();
@@ -303,7 +341,7 @@ class ObservableBuilder {
 
         var fieldsToAdd:Array<Field> = [];
         var fieldsToRemove:Array<Field> = [];
-        var observableSubObjects:Array<String> = [];
+        var observableSubObjects:Array<{name:String, expr:Expr}> = [];
 
         for (field in fields) {
             if (field.name == "groupObservableChanges" || field.name == "changesToNotify" || field.name == "waitingForTick" || field.name == "_changeListeners") {
@@ -390,7 +428,7 @@ class ObservableBuilder {
                     fieldsToAdd.push(newField);
 
                     if (isArray(field) || isMap(field)) {
-                        observableSubObjects.push(varName);
+                        observableSubObjects.push({name: varName, expr: e});
                         var newField = {
                             name: "set_" + field.name,
                             access: [APrivate],
@@ -418,7 +456,7 @@ class ObservableBuilder {
                         }
                         fieldsToAdd.push(newField);
                     } else if (isObservable(field)) {
-                        observableSubObjects.push(varName);
+                        observableSubObjects.push({name: varName, expr: e});
                         var newField = {
                             name: "set_" + field.name,
                             access: [APrivate],
@@ -508,16 +546,7 @@ class ObservableBuilder {
                 var t = ComplexTypeTools.toType(t);
                 switch (t) {
                     case TInst(t, params):
-                        var classType = t.get();
-                        if (classType != null) {
-                            if (classType.interfaces != null) {
-                                for (i in classType.interfaces) {
-                                    if (i.t.toString() == "observable.IObservable") {
-                                        return true;
-                                    }
-                                }
-                            }
-                        }
+                        return hasObservableInterface(t.get());
                      case _:   
                         return false;
                 }
@@ -525,6 +554,23 @@ class ObservableBuilder {
                 return false;
         }
         return false;
+    }
+
+    private static function hasObservableInterface(classType:ClassType):Bool {
+        if (classType == null) {
+            return false;
+        }
+        if (classType.interfaces != null) {
+            for (i in classType.interfaces) {
+                if (i.t.toString() == "observable.IObservable") {
+                    return true;
+                }
+            }
+        }
+        if (classType.superClass == null) {
+            return false;
+        }
+        return hasObservableInterface(classType.superClass.t.get());
     }
 
     private static function hasMeta(name:String, meta:Metadata) {

@@ -30,7 +30,7 @@ class ObservableArrayImpl<T> implements IObservable {
     public function new() {
     }
 
-    private function set_changeListeners(value:Array<Array<ChangeInfo<Any>>->Void>):Array<Array<ChangeInfo<Any>>->Void> {
+    private function set_changeListeners(value:Array<Changes->Void>):Array<Changes->Void> {
         _changeListeners = value;
         if (_array != null) {
             for (item in _array) {

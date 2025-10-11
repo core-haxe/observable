@@ -48,7 +48,7 @@ class ObservableMapImpl<K, V> implements IObservable {
         notifyChanged(this, _fieldName, item, null);
     }
 
-    private function set_changeListeners(value:Array<Array<ChangeInfo<Any>>->Void>):Array<Array<ChangeInfo<Any>>->Void> {
+    private function set_changeListeners(value:Array<Changes->Void>):Array<Changes->Void> {
         _changeListeners = value;
         if (_map != null) {
             for (key in _map.keys()) {
