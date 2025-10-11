@@ -15,6 +15,11 @@ class ObservableDefaults {
             fn();
         });
 
+        #elseif cpp
+
+        // TODO: this need to be done properly, its inefficient at grouping like this
+        fn();
+
         #else
 
         haxe.Timer.delay(fn, 0);
