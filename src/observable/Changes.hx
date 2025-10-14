@@ -28,6 +28,14 @@ class Changes {
         }
     }
 
+    public var fieldList(get, never):Array<String>;
+    private function get_fieldList():Array<String> {
+        var list = [];
+        for (field in _itemsMap.keys()) {
+            list.push(field);
+        }
+        return list;
+    }
 
     public function contains(field:String) {
         return _itemsMap.exists(field);
