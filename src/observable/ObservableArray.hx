@@ -30,6 +30,11 @@ class ObservableArrayImpl<T> implements IObservable {
     public function new() {
     }
 
+    public var length(get, never):Int;
+    private function get_length():Int {
+        return _array.length;
+    }
+
     private function set_changeListeners(value:Array<Changes->Void>):Array<Changes->Void> {
         _changeListeners = value;
         if (_array != null) {
@@ -41,6 +46,10 @@ class ObservableArrayImpl<T> implements IObservable {
             }
         }
         return value;
+    }
+
+    public function contains(item:T):Bool {
+        return _array.contains(item);
     }
 
     public function get(index:Int) {
@@ -71,5 +80,9 @@ class ObservableArrayImpl<T> implements IObservable {
             @:privateAccess cast(item, IObservable).changeListeners = this.changeListeners;
         }
         notifyChanged(this, _fieldName, item, null);
+    }
+
+    public function iterator():Iterator<T> {
+        return _array.iterator();
     }
 }

@@ -51,7 +51,11 @@ class ObservableBuilder {
             if (observableSubObject.expr != null) {
                 var varName = observableSubObject.name.substring(1);
                 var e = observableSubObject.expr;
-                assignmentExprs.push(macro $i{varName} = $e);
+                if (e != null) {
+                    assignmentExprs.push(macro {
+                        $i{varName} = $e;
+                    });
+                }
             }
         }
         if (ctor == null) {
@@ -63,7 +67,9 @@ class ObservableBuilder {
                         args:[],
                         expr: macro {
                             super();
-                            $a{assignmentExprs}
+                            {
+                                $a{assignmentExprs}
+                            }
                             set_changeListeners(_changeListeners);
                         }
                     }),
@@ -76,7 +82,9 @@ class ObservableBuilder {
                     kind: FFun({
                         args:[],
                         expr: macro {
-                            $a{assignmentExprs}
+                            {
+                                $a{assignmentExprs}
+                            }
                             set_changeListeners(_changeListeners);
                         }
                     }),
@@ -91,7 +99,9 @@ class ObservableBuilder {
                     switch (f.expr.expr) {
                         case EBlock(exprs):
                             exprs.insert(1, macro {
-                                $a{assignmentExprs}
+                                {
+                                    $a{assignmentExprs}
+                                }
                                 set_changeListeners(_changeListeners);
                             });
                         case _:    
@@ -428,6 +438,7 @@ class ObservableBuilder {
                     fieldsToAdd.push(newField);
 
                     if (isArray(field) || isMap(field)) {
+                        //observableSubObjects.push({name: varName, expr: null});
                         observableSubObjects.push({name: varName, expr: e});
                         var newField = {
                             name: "set_" + field.name,
