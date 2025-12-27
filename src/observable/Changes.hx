@@ -16,7 +16,9 @@ class Changes {
     }
 
     private var _itemsMap:Map<String, Array<ChangeInfo<Any>>> = [];
+    private var _fieldList:Array<String> = [];
     private function buildItemsMap() {
+        _fieldList = [];
         _itemsMap.clear();
         for (item in _items) {
             var list = _itemsMap.get(item.field);
@@ -25,16 +27,15 @@ class Changes {
                 _itemsMap.set(item.field, list);
             }
             list.push(item);
+            if (!_fieldList.contains(item.field)) {
+                _fieldList.push(item.field);
+            }
         }
     }
 
     public var fieldList(get, never):Array<String>;
     private function get_fieldList():Array<String> {
-        var list = [];
-        for (field in _itemsMap.keys()) {
-            list.push(field);
-        }
-        return list;
+        return _fieldList;
     }
 
     public function contains(field:String) {
