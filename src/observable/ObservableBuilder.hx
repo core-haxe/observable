@@ -1,5 +1,6 @@
 package observable;
 
+import haxe.macro.ExprTools;
 import haxe.macro.Type.ClassType;
 import haxe.macro.TypeTools;
 #if macro
@@ -368,6 +369,10 @@ class ObservableBuilder {
 
             if (hasMeta("observable", field.meta)) {
                 useField = true;
+                var observableMeta = getMeta("observable", field.meta);
+                if (observableMeta.params.length > 0) {
+                    useField = ExprTools.getValue(observableMeta.params[0]);
+                }
             }
 
             if (!useField) {
@@ -594,6 +599,18 @@ class ObservableBuilder {
             }
         }
         return false;
+    }
+
+    private static function getMeta(name:String, meta:Metadata):MetadataEntry {
+        if (meta == null) {
+            return null;
+        }
+        for (m in meta) {
+            if (m.name == name || m.name == ":" + name) {
+                return m;
+            }
+        }
+        return null;
     }
     #end
 }
