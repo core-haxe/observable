@@ -19,6 +19,7 @@ abstract ObservableArray<T>(ObservableArrayImpl<T>) {
     private static inline function fromArray<T>(array:Array<T>):ObservableArray<T> {
         var observableArray = new ObservableArray();
         @:privateAccess observableArray._array = array;
+        @:privateAccess observableArray.updateChangeListeners();
         return observableArray;
     }
 }
@@ -35,17 +36,21 @@ class ObservableArrayImpl<T> implements IObservable {
         return _array.length;
     }
 
-    private function set_changeListeners(value:Array<Changes->Void>):Array<Changes->Void> {
+    private function set_changeListeners(value:Array<{listener: Changes->Void}>):Array<{listener: Changes->Void}> {
         _changeListeners = value;
+        updateChangeListeners();
+        return value;
+    }
+
+    private function updateChangeListeners() {
         if (_array != null) {
             for (item in _array) {
                 if (item is IObservable) {
                     @:privateAccess cast(item, IObservable).notifyChanged = this.notifyChanged;
-                    @:privateAccess cast(item, IObservable).changeListeners = value;
+                    @:privateAccess cast(item, IObservable).changeListeners = _changeListeners;
                 }
             }
         }
-        return value;
     }
 
     public function contains(item:T):Bool {

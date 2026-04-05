@@ -14,6 +14,7 @@ abstract ObservableMap<K, V>(ObservableMapImpl<K, V>) {
     private static inline function fromMap<K, V>(map:Map<K, V>):ObservableMap<K, V> {
         var observableMap = new ObservableMap();
         @:privateAccess observableMap._map = map;
+        @:privateAccess observableMap.updateChangeListeners();
         return observableMap;
     }
  
@@ -50,15 +51,19 @@ class ObservableMapImpl<K, V> implements IObservable {
 
     private function set_changeListeners(value:Array<Changes->Void>):Array<Changes->Void> {
         _changeListeners = value;
+        updateChangeListeners();
+        return value;
+    }
+
+    private function updateChangeListeners() {
         if (_map != null) {
             for (key in _map.keys()) {
                 var item = _map.get(key);
                 if (item is IObservable) {
                     @:privateAccess cast(item, IObservable).notifyChanged = this.notifyChanged;
-                    @:privateAccess cast(item, IObservable).changeListeners = value;
+                    @:privateAccess cast(item, IObservable).changeListeners = _changeListeners;
                 }
             }
         }
-        return value;
     }
 }

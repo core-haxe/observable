@@ -1,9 +1,9 @@
 package observable;
 
+#if macro
 import haxe.macro.ExprTools;
 import haxe.macro.Type.ClassType;
 import haxe.macro.TypeTools;
-#if macro
 import haxe.macro.Compiler;
 import haxe.macro.Expr.Field;
 import haxe.macro.Expr;
@@ -13,7 +13,7 @@ import haxe.macro.ComplexTypeTools;
 
 class ObservableBuilder {
     public static macro function build():Array<Field> {
-        if (Context.getLocalClass().get().name != "ObservableArrayImpl" && Context.getLocalClass().get().name != "ObservableMapImpl") {
+        if (Context.getLocalClass().get().name != "ObservableArrayImpl" && Context.getLocalClass().get().name != "ObservableMapImpl" && Context.getLocalClass().get().name != "ObservableDynamicImpl") {
             Sys.println("observable  > building observable for " + Context.getLocalClass().toString());
         }
 
@@ -23,8 +23,8 @@ class ObservableBuilder {
         buildNotifyChanged(fields);
         buildOnTick(fields);
 
-        var observableSubObjects:Array<{name:String, expr:Expr}> = [];
-        if (Context.getLocalClass().get().name != "ObservableArrayImpl" && Context.getLocalClass().get().name != "ObservableMapImpl") {
+        var observableSubObjects:Array<{name:String, expr:Expr, ?isDynamic:Bool}> = [];
+        if (Context.getLocalClass().get().name != "ObservableArrayImpl" && Context.getLocalClass().get().name != "ObservableMapImpl" && Context.getLocalClass().get().name != "ObservableDynamicImpl") {
             observableSubObjects = buildObservableProperties(fields);
         }
 
@@ -35,6 +35,10 @@ class ObservableBuilder {
     }
 
     #if macro
+    private static function hasField(name:String, fields:Array<Field>):Bool {
+        return (getField(name, fields) != null);
+    }
+
     private static function getField(name:String, fields:Array<Field>):Field {
         for (f in fields) {
             if (f.name == name) {
@@ -156,7 +160,7 @@ class ObservableBuilder {
         }
     }
 
-    private static function buildChangeListeners(fields:Array<Field>, observableSubObjects:Array<{name:String, expr:Expr}>) {
+    private static function buildChangeListeners(fields:Array<Field>, observableSubObjects:Array<{name:String, expr:Expr, ?isDynamic:Bool}>) {
         var existing_changeListeners = TypeTools.findField(Context.getLocalClass().get(), "_changeListeners");
         if (existing_changeListeners == null) {
             var _changeListeners = getField("_changeListeners", fields);
@@ -164,7 +168,7 @@ class ObservableBuilder {
                 _changeListeners = {
                     name: "_changeListeners",
                     access: [APrivate],
-                    kind: FVar(macro: Array<observable.Changes->Void>, macro []),
+                    kind: FVar(macro: Array<{listener: observable.Changes->Void}>, macro []),
                     pos: Context.currentPos()
                 }
                 fields.push(_changeListeners);
@@ -175,7 +179,7 @@ class ObservableBuilder {
                 changeListeners = {
                     name: "changeListeners",
                     access: [APrivate],
-                    kind: FProp("get", "set", macro: Array<observable.Changes->Void>),
+                    kind: FProp("get", "set", macro: Array<{listener: observable.Changes->Void}>),
                     pos: Context.currentPos()
                 }
                 fields.push(changeListeners);
@@ -212,7 +216,7 @@ class ObservableBuilder {
                     name: "set_changeListeners",
                     access: [APrivate],
                     kind: FFun({
-                        args:[{ name: "value", type: macro: Array<observable.Changes->Void>}],
+                        args:[{ name: "value", type: macro: Array<{listener: observable.Changes->Void}>}],
                         expr: macro {
                             _changeListeners = value;
                             {
@@ -237,13 +241,48 @@ class ObservableBuilder {
                     kind: FFun({
                         args:[{ name: "listener", type: macro: observable.Changes->Void}],
                         expr: macro {
-                            _changeListeners.push(listener);
+                            _changeListeners.push({ listener: listener });
                         }
                     }),
                     pos: Context.currentPos()
                 }
                 fields.push(registerChangeListener);
             }
+        } else {
+        }
+
+        var registerChangeListener = getField("registerChangeListener", fields);
+        if (registerChangeListener == null) {
+            if (registerChangeListener == null) {
+                var exprs:Array<Expr> = [];
+                for (observableSubObject in observableSubObjects) {
+                    if (observableSubObject.isDynamic) {
+                        exprs.push(macro {
+                            if ($i{observableSubObject.name} != null) {
+                                @:privateAccess $i{observableSubObject.name}.registerChangeListener(listener);
+                            }
+                        });
+                    }
+                }
+
+                registerChangeListener = {
+                    name: "registerChangeListener",
+                    access: [APublic, AOverride],
+                    kind: FFun({
+                        args:[{ name: "listener", type: macro: observable.Changes->Void}],
+                        expr: macro {
+                            super.registerChangeListener(listener);
+                            {
+                                $a{exprs}
+                            }
+                        }
+                    }),
+                    pos: Context.currentPos()
+                }
+                fields.push(registerChangeListener);
+            }
+        } else {
+
         }
     }
 
@@ -295,7 +334,7 @@ class ObservableBuilder {
                                         newValue: newValue,
                                         oldValue: oldValue
                                     }];
-                                    listener(changes);
+                                    listener.listener(changes);
                                 }
                             }
                         }
@@ -331,7 +370,7 @@ class ObservableBuilder {
                         var changes = new observable.Changes();
                         changes.items = copy;
                         for (listener in changeListeners) {
-                            listener(changes);
+                            listener.listener(changes);
                         }
                     }
                 case _:
@@ -339,7 +378,7 @@ class ObservableBuilder {
         }
     }
 
-    private static function buildObservableProperties(fields:Array<Field>):Array<{name:String, expr:Expr}> {
+    private static function buildObservableProperties(fields:Array<Field>):Array<{name:String, expr:Expr, ?isDynamic:Bool}> {
         var allowPublic:Bool = true;
         var allowPrivate:Bool = true;
         var defines = Context.getDefines();
@@ -352,7 +391,7 @@ class ObservableBuilder {
 
         var fieldsToAdd:Array<Field> = [];
         var fieldsToRemove:Array<Field> = [];
-        var observableSubObjects:Array<{name:String, expr:Expr}> = [];
+        var observableSubObjects:Array<{name:String, expr:Expr, ?isDynamic:Bool}> = [];
 
         for (field in fields) {
             if (field.name == "groupObservableChanges" || field.name == "changesToNotify" || field.name == "waitingForTick" || field.name == "_changeListeners") {
@@ -391,6 +430,14 @@ class ObservableBuilder {
                                     case TPType(t): t;
                                     case _: null;
                                 }
+                                var isDynamic = switch(tp0) {
+                                    case TPath(p):
+                                        p.name == "Dynamic";
+                                    case _: false;
+                                }
+                                if (isDynamic) {
+                                    tp0 = macro: observable.ObservableDynamic;
+                                }
                                 newType = macro: observable.ObservableArray<$tp0>;
                             case _:
                                 trace(t);
@@ -410,6 +457,8 @@ class ObservableBuilder {
                             case _:
                                 trace(t);
                         }
+                    } else if (isDynamic(field)) {
+                        newType = macro: observable.ObservableDynamic;
                     }
 
                     var newField = {
@@ -443,7 +492,6 @@ class ObservableBuilder {
                     fieldsToAdd.push(newField);
 
                     if (isArray(field) || isMap(field)) {
-                        //observableSubObjects.push({name: varName, expr: null});
                         observableSubObjects.push({name: varName, expr: e});
                         var newField = {
                             name: "set_" + field.name,
@@ -467,6 +515,27 @@ class ObservableBuilder {
                                     return value;
                                 },
                                 ret: newType
+                            }),
+                            pos: Context.currentPos()
+                        }
+                        fieldsToAdd.push(newField);
+                    } else if (isDynamic(field)) {
+                        observableSubObjects.push({name: varName, expr: e, isDynamic: true});
+                        var newField = {
+                            name: "set_" + field.name,
+                            access: [APrivate],
+                            kind: FFun({
+                                args:[{name: "value", type: t}],
+                                expr: macro {
+                                    if ($i{varName} == value) {
+                                        return value;
+                                    }
+                                    var oldValue = $i{varName};
+                                    $i{varName} = value;
+                                    notifyChanged(this, $v{field.name}, $i{varName}, oldValue);
+                                    return value;
+                                },
+                                ret: t
                             }),
                             pos: Context.currentPos()
                         }
@@ -550,6 +619,17 @@ class ObservableBuilder {
             case FVar(t, e):
                 switch (t) {
                     case TPath(p): p.name == "Map" || p.name == "ObservableMap";
+                    case _: false;
+                }
+            case _: false;
+        }
+    }
+
+    private static function isDynamic(field:Field):Bool {
+        return switch (field.kind) {
+            case FVar(t, e):
+                switch (t) {
+                    case TPath(p): p.name == "Dynamic" || p.name == "ObservableDynamic";
                     case _: false;
                 }
             case _: false;
