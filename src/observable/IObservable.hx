@@ -6,6 +6,7 @@ interface IObservable {
 
     private var changeListeners(get, set):Array<{listener: Changes->Void}>;
     public function registerChangeListener(listener:Changes->Void):Void;
+    public function unregisterChangeListener(listener:Changes->Void):Void;
 
     private dynamic function notifyChanged(source:Any, field:String, newValue:Any, oldValue:Any):Void;
 }

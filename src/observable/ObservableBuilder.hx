@@ -251,6 +251,37 @@ class ObservableBuilder {
         } else {
         }
 
+        var existingUnregisterChangeListener = TypeTools.findField(Context.getLocalClass().get(), "unregisterChangeListener");
+        if (existingUnregisterChangeListener == null) {
+            var unregisterChangeListener = getField("unregisterChangeListener", fields);
+            if (unregisterChangeListener == null) {
+                unregisterChangeListener = {
+                    name: "unregisterChangeListener",
+                    access: [APublic],
+                    kind: FFun({
+                        args:[{ name: "listener", type: macro: observable.Changes->Void}],
+                        expr: macro {
+                            if (_changeListeners == null) {
+                                return;
+                            }
+                            var toRemove = null;
+                            for (item in _changeListeners) {
+                                if (item.listener == listener) {
+                                    toRemove = item;
+                                    break;
+                                }
+                            }
+                            if (toRemove != null) {
+                                _changeListeners.remove(toRemove);
+                            }
+                        }
+                    }),
+                    pos: Context.currentPos()
+                }
+                fields.push(unregisterChangeListener);
+            }
+        }
+
         var registerChangeListener = getField("registerChangeListener", fields);
         if (registerChangeListener == null) {
             if (registerChangeListener == null) {
@@ -325,7 +356,8 @@ class ObservableBuilder {
                             }
                         } else {
                             if (changeListeners != null) {
-                                for (listener in changeListeners) {
+                                var listenersCopy = changeListeners.copy();
+                                for (listener in listenersCopy) {
                                     var changes = new observable.Changes();
                                     changes.items = [{
                                         timestamp: Date.now().getTime(),
@@ -369,7 +401,8 @@ class ObservableBuilder {
                         waitingForTick = false;
                         var changes = new observable.Changes();
                         changes.items = copy;
-                        for (listener in changeListeners) {
+                        var listenersCopy = (changeListeners == null) ? [] : changeListeners.copy();
+                        for (listener in listenersCopy) {
                             listener.listener(changes);
                         }
                     }
