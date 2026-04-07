@@ -162,6 +162,15 @@ class ObservableBuilder {
 
     private static function buildChangeListeners(fields:Array<Field>, observableSubObjects:Array<{name:String, expr:Expr, ?isDynamic:Bool}>) {
         var existing_changeListeners = TypeTools.findField(Context.getLocalClass().get(), "_changeListeners");
+        var propagateExprs:Array<Expr> = [];
+        for (observableSubObject in observableSubObjects) {
+            propagateExprs.push(macro {
+                if ($i{observableSubObject.name} != null) {
+                    @:privateAccess $i{observableSubObject.name}.notifyChanged = this.notifyChanged;
+                    @:privateAccess $i{observableSubObject.name}.changeListeners = value;
+                }
+            });
+        }
         if (existing_changeListeners == null) {
             var _changeListeners = getField("_changeListeners", fields);
             if (_changeListeners == null) {
@@ -203,15 +212,6 @@ class ObservableBuilder {
 
             var set_changeListeners = getField("set_changeListeners", fields);
             if (set_changeListeners == null) {
-                var exprs:Array<Expr> = [];
-                for (observableSubObject in observableSubObjects) {
-                    exprs.push(macro {
-                        if ($i{observableSubObject.name} != null) {
-                            @:privateAccess $i{observableSubObject.name}.notifyChanged = this.notifyChanged;
-                            @:privateAccess $i{observableSubObject.name}.changeListeners = value;
-                        }
-                    });
-                }
                 set_changeListeners = {
                     name: "set_changeListeners",
                     access: [APrivate],
@@ -220,7 +220,7 @@ class ObservableBuilder {
                         expr: macro {
                             _changeListeners = value;
                             {
-                                $a{exprs}
+                                $a{propagateExprs}
                             }
                             return value;
                         }
@@ -248,7 +248,24 @@ class ObservableBuilder {
                 }
                 fields.push(registerChangeListener);
             }
-        } else {
+        }
+        if (existing_changeListeners != null && observableSubObjects.length > 0 && getField("set_changeListeners", fields) == null) {
+            var set_changeListeners = {
+                name: "set_changeListeners",
+                access: [APrivate, AOverride],
+                kind: FFun({
+                    args:[{ name: "value", type: macro: Array<{listener: observable.Changes->Void}>}],
+                    expr: macro {
+                        super.changeListeners = value;
+                        {
+                            $a{propagateExprs}
+                        }
+                        return value;
+                    }
+                }),
+                pos: Context.currentPos()
+            }
+            fields.push(set_changeListeners);
         }
 
         var existingUnregisterChangeListener = TypeTools.findField(Context.getLocalClass().get(), "unregisterChangeListener");
