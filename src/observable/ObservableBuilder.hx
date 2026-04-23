@@ -420,11 +420,17 @@ class ObservableBuilder {
                         waitingForTick = false;
 
                         if (observable.ObservableDefaults.EliminateDuplicates) {
-                            var mergedByField = new Map<String, observable.ChangeInfo<Any>>();
-                            var orderedFields:Array<String> = [];
+                            var mergedBySource = new haxe.ds.ObjectMap<Dynamic, Map<String, observable.ChangeInfo<Any>>>();
+                            var merged:Array<observable.ChangeInfo<Any>> = [];
 
                             for (change in copy) {
-                                var existing = mergedByField.get(change.field);
+                                var byField = mergedBySource.get(change.source);
+                                if (byField == null) {
+                                    byField = new Map<String, observable.ChangeInfo<Any>>();
+                                    mergedBySource.set(change.source, byField);
+                                }
+
+                                var existing = byField.get(change.field);
                                 if (existing == null) {
                                     existing = {
                                         timestamp: change.timestamp,
@@ -433,24 +439,17 @@ class ObservableBuilder {
                                         newValue: change.newValue,
                                         oldValue: change.oldValue
                                     };
-                                    mergedByField.set(change.field, existing);
-                                    orderedFields.push(change.field);
+                                    byField.set(change.field, existing);
+                                    merged.push(existing);
                                 } else {
                                     existing.timestamp = change.timestamp;
                                     existing.newValue = change.newValue;
                                 }
                             }
 
-                            var merged:Array<observable.ChangeInfo<Any>> = [];
-                            for (field in orderedFields) {
-                                var item = mergedByField.get(field);
-                                if (item != null) {
-                                    merged.push(item);
-                                }
-                            }
                             copy = merged;
                         }
-
+                        
                         var changes = new observable.Changes();
                         changes.items = copy;
                         var listenersCopy = (changeListeners == null) ? [] : changeListeners.copy();
