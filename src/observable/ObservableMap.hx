@@ -52,7 +52,7 @@ class ObservableMapImpl<K, V> implements IObservable {
         notifyChanged(this, _fieldName, this, this);
     }
 
-    private function set_changeListeners(value:Array<Changes->Void>):Array<Changes->Void> {
+    private function set_changeListeners(value:Array<{listener: Changes->Void}>):Array<{listener: Changes->Void}> {
         _changeListeners = value;
         updateChangeListeners();
         return value;
