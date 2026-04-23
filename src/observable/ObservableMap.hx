@@ -49,7 +49,7 @@ class ObservableMapImpl<K, V> implements IObservable {
         _map.set(key, item);
         attachItem(item);
 
-        notifyChanged(this, _fieldName, item, oldItem);
+        notifyChanged(this, _fieldName, this, this);
     }
 
     private function set_changeListeners(value:Array<Changes->Void>):Array<Changes->Void> {

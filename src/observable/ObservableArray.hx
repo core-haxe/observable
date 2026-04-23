@@ -84,14 +84,14 @@ class ObservableArrayImpl<T> implements IObservable {
         _array[index] = item;
         attachItem(item);
 
-        notifyChanged(this, _fieldName, item, oldItem);
+        notifyChanged(this, _fieldName, this, this);
     }
 
     public function remove(item:T) {
         var found = _array.remove(item);
         if (found) {
             detachItem(item);
-            notifyChanged(this, _fieldName, null, item);
+            notifyChanged(this, _fieldName, this, this);
         }
         return found;
     }
@@ -99,7 +99,7 @@ class ObservableArrayImpl<T> implements IObservable {
     public function push(item:T) {
         _array.push(item);
         attachItem(item);
-        notifyChanged(this, _fieldName, item, null);
+        notifyChanged(this, _fieldName, this, this);
     }
 
     public function iterator():Iterator<T> {
