@@ -11,15 +11,23 @@ class Changes {
     }
     private function set_items(value:Array<ChangeInfo<Any>>):Array<ChangeInfo<Any>> {
         _items = value;
-        buildItemsMap();
+        _itemsMap = null;
+        _fieldList = null;
+        _itemsMapBuilt = false;
         return value;
     }
 
     private var _itemsMap:Map<String, Array<ChangeInfo<Any>>> = [];
     private var _fieldList:Array<String> = [];
+    private var _itemsMapBuilt:Bool = false;
     private function buildItemsMap() {
+        if (_itemsMapBuilt) {
+            return;
+        }
+
+        _itemsMap = [];
         _fieldList = [];
-        _itemsMap.clear();
+        
         for (item in _items) {
             var list = _itemsMap.get(item.field);
             if (list == null) {
@@ -31,14 +39,18 @@ class Changes {
                 _fieldList.push(item.field);
             }
         }
+
+        _itemsMapBuilt = true;
     }
 
     public var fieldList(get, never):Array<String>;
     private function get_fieldList():Array<String> {
+        buildItemsMap();
         return _fieldList;
     }
 
     public function contains(field:String) {
+        buildItemsMap();
         return _itemsMap.exists(field);
     }
 }
