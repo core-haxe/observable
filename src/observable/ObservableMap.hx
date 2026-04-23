@@ -41,12 +41,15 @@ class ObservableMapImpl<K, V> implements IObservable {
     }
 
     public function set(key:K, item:V):Void {
-        _map.set(key, item);
-        if (item is IObservable) {
-            @:privateAccess cast(item, IObservable).notifyChanged = this.notifyChanged;
-            @:privateAccess cast(item, IObservable).changeListeners = this.changeListeners;
+        var oldItem = _map.get(key);
+        if (oldItem != null && oldItem != item) {
+            detachItem(oldItem);
         }
-        notifyChanged(this, _fieldName, item, null);
+
+        _map.set(key, item);
+        attachItem(item);
+
+        notifyChanged(this, _fieldName, item, oldItem);
     }
 
     private function set_changeListeners(value:Array<Changes->Void>):Array<Changes->Void> {
@@ -64,6 +67,20 @@ class ObservableMapImpl<K, V> implements IObservable {
                     @:privateAccess cast(item, IObservable).changeListeners = _changeListeners;
                 }
             }
+        }
+    }
+
+    private function attachItem(item:V):Void {
+        if (item is IObservable) {
+            @:privateAccess cast(item, IObservable).notifyChanged = this.notifyChanged;
+            @:privateAccess cast(item, IObservable).changeListeners = this.changeListeners;
+        }
+    }
+
+    private function detachItem(item:V):Void {
+        if (item is IObservable) {
+            @:privateAccess cast(item, IObservable).notifyChanged = null;
+            @:privateAccess cast(item, IObservable).changeListeners = null;
         }
     }
 }

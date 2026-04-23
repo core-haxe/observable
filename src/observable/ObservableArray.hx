@@ -53,6 +53,20 @@ class ObservableArrayImpl<T> implements IObservable {
         }
     }
 
+    private function attachItem(item:T):Void {
+        if (item is IObservable) {
+            @:privateAccess cast(item, IObservable).notifyChanged = this.notifyChanged;
+            @:privateAccess cast(item, IObservable).changeListeners = this.changeListeners;
+        }
+    }
+
+    private function detachItem(item:T):Void {
+        if (item is IObservable) {
+            @:privateAccess cast(item, IObservable).notifyChanged = null;
+            @:privateAccess cast(item, IObservable).changeListeners = null;
+        }
+    }
+
     public function contains(item:T):Bool {
         return _array.contains(item);
     }
@@ -62,28 +76,29 @@ class ObservableArrayImpl<T> implements IObservable {
     }
 
     public function set(index:Int, item:T) {
-        if (item is IObservable) {
-            @:privateAccess cast(item, IObservable).notifyChanged = this.notifyChanged;
-            @:privateAccess cast(item, IObservable).changeListeners = this.changeListeners;
+        var oldItem = _array[index];
+        if (oldItem != null && oldItem != item) {
+            detachItem(oldItem);
         }
+
         _array[index] = item;
-        notifyChanged(this, _fieldName, item, null);
+        attachItem(item);
+
+        notifyChanged(this, _fieldName, item, oldItem);
     }
 
     public function remove(item:T) {
         var found = _array.remove(item);
         if (found) {
-            notifyChanged(this, _fieldName, item, null);
+            detachItem(item);
+            notifyChanged(this, _fieldName, null, item);
         }
         return found;
     }
 
     public function push(item:T) {
         _array.push(item);
-        if (item is IObservable) {
-            @:privateAccess cast(item, IObservable).notifyChanged = this.notifyChanged;
-            @:privateAccess cast(item, IObservable).changeListeners = this.changeListeners;
-        }
+        attachItem(item);
         notifyChanged(this, _fieldName, item, null);
     }
 
