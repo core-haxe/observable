@@ -35,6 +35,9 @@ class ObservableDynamicImpl implements IObservable {
 
     public function set(name:String, value:Any) {
         var oldValue = get(name);
+        if (oldValue == value) {
+            return;
+        }
         Reflect.setProperty(_object, name, value);
         notifyChanged(this, name, value, oldValue);
     }

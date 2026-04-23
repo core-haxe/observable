@@ -68,13 +68,13 @@ class ObservableMapImpl<K, V> implements IObservable {
         initMapForKey(key);
 
         var oldItem = _map.get(key);
-        if (oldItem != null && oldItem != item) {
+        _map.set(key, item);
+
+        if (oldItem != null && oldItem != item && !existsItem(oldItem)) {
             detachItem(oldItem);
         }
 
-        _map.set(key, item);
         attachItem(item);
-
         notifyChanged(this, _fieldName, this, this);
     }
 
@@ -85,12 +85,35 @@ class ObservableMapImpl<K, V> implements IObservable {
         return _map.exists(key);
     }
 
+    private function existsItem(item:V):Bool {
+        if (_map == null) {
+            return false;
+        }
+
+        for (key in _map.keys()) {
+            if (_map.get(key) == item) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function remove(key:K):Bool {
         if (_map == null) {
             return false;
         }
 
-        return _map.remove(key);
+        var oldItem = _map.get(key);
+        var removed = _map.remove(key);
+        if (removed) {
+            if (oldItem != null && !existsItem(oldItem)) {
+                detachItem(oldItem);
+            }
+            notifyChanged(this, _fieldName, this, this);
+        }
+
+        return removed;
     }
 
     private function set_changeListeners(value:Array<{listener: Changes->Void}>):Array<{listener: Changes->Void}> {
@@ -127,22 +150,48 @@ class ObservableMapImpl<K, V> implements IObservable {
 
     public function iterator():Iterator<V> {
         if (_map == null) {
-            return null;
+            return new ObservableMapEmptyIterator<V>();
         }
         return _map.iterator();
     }
 
     public function keys():Iterator<K> {
         if (_map == null) {
-            return null;
+            return new ObservableMapEmptyIterator<K>();
         }
         return _map.keys();
     }
 
 	public function keyValueIterator():KeyValueIterator<K, V> {
         if (_map == null) {
-            return null;
+            return new ObservableMapEmptyKeyValueIterator<K, V>();
         }
 		return _map.keyValueIterator();
 	}
+}
+
+private class ObservableMapEmptyIterator<T> {
+    public function new() {
+    }
+
+    public function hasNext():Bool {
+        return false;
+    }
+
+    public function next():T {
+        throw "No more elements";
+    }
+}
+
+private class ObservableMapEmptyKeyValueIterator<K, V> {
+    public function new() {
+    }
+
+    public function hasNext():Bool {
+        return false;
+    }
+
+    public function next():{key:K, value:V} {
+        throw "No more elements";
+    }
 }

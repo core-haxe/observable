@@ -606,9 +606,11 @@ class ObservableBuilder {
                                         @:privateAccess oldValue.notifyChanged = null;
                                         @:privateAccess oldValue.changeListeners = null;
                                     }
-                                    @:privateAccess $i{varName}.notifyChanged = this.notifyChanged;
-                                    @:privateAccess $i{varName}.changeListeners = this.changeListeners;
-                                    @:privateAccess $i{varName}._fieldName = $v{field.name};
+                                    if ($i{varName} != null) {
+                                        @:privateAccess $i{varName}.notifyChanged = this.notifyChanged;
+                                        @:privateAccess $i{varName}.changeListeners = this.changeListeners;
+                                        @:privateAccess $i{varName}._fieldName = $v{field.name};
+                                    }
                                     notifyChanged(this, $v{field.name}, $i{varName}, oldValue);
                                     return value;
                                 },
@@ -665,8 +667,10 @@ class ObservableBuilder {
                                         @:privateAccess oldValue.notifyChanged = null;
                                         @:privateAccess oldValue.changeListeners = null;
                                     }
-                                    @:privateAccess $i{varName}.notifyChanged = this.notifyChanged;
-                                    @:privateAccess $i{varName}.changeListeners = this.changeListeners;
+                                    if ($i{varName} != null) {
+                                        @:privateAccess $i{varName}.notifyChanged = this.notifyChanged;
+                                        @:privateAccess $i{varName}.changeListeners = this.changeListeners;
+                                    }
                                     notifyChanged(this, $v{field.name}, $i{varName}, oldValue);
                                     return value;
                                 },

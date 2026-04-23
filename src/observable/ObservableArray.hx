@@ -77,20 +77,22 @@ class ObservableArrayImpl<T> implements IObservable {
 
     public function set(index:Int, item:T) {
         var oldItem = _array[index];
-        if (oldItem != null && oldItem != item) {
+        _array[index] = item;
+
+        if (oldItem != null && oldItem != item && !_array.contains(oldItem)) {
             detachItem(oldItem);
         }
 
-        _array[index] = item;
         attachItem(item);
-
         notifyChanged(this, _fieldName, this, this);
     }
 
     public function remove(item:T) {
         var found = _array.remove(item);
         if (found) {
-            detachItem(item);
+            if (!_array.contains(item)) {
+                detachItem(item);
+            }
             notifyChanged(this, _fieldName, this, this);
         }
         return found;
