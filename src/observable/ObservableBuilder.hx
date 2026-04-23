@@ -359,6 +359,10 @@ class ObservableBuilder {
             switch (notifyChanged.kind) {
                 case FFun(f):
                     f.expr = macro {
+                        if (changeListeners == null || changeListeners.length == 0) {
+                            return;
+                        }
+
                         if (groupObservableChanges) {
                             changesToNotify.push({
                                 timestamp: Date.now().getTime(),
@@ -372,19 +376,17 @@ class ObservableBuilder {
                                 observable.ObservableDefaults.onTick(onTick);
                             }
                         } else {
-                            if (changeListeners != null) {
-                                var listenersCopy = changeListeners.copy();
-                                for (listener in listenersCopy) {
-                                    var changes = new observable.Changes();
-                                    changes.items = [{
-                                        timestamp: Date.now().getTime(),
-                                        source: source,
-                                        field: field,
-                                        newValue: newValue,
-                                        oldValue: oldValue
-                                    }];
-                                    listener.listener(changes);
-                                }
+                            var listenersCopy = changeListeners.copy();
+                            for (listener in listenersCopy) {
+                                var changes = new observable.Changes();
+                                changes.items = [{
+                                    timestamp: Date.now().getTime(),
+                                    source: source,
+                                    field: field,
+                                    newValue: newValue,
+                                    oldValue: oldValue
+                                }];
+                                listener.listener(changes);
                             }
                         }
                     }
@@ -416,6 +418,39 @@ class ObservableBuilder {
                         var copy = changesToNotify.copy();
                         changesToNotify = [];
                         waitingForTick = false;
+
+                        if (observable.ObservableDefaults.EliminateDuplicates) {
+                            var mergedByField = new Map<String, observable.ChangeInfo<Any>>();
+                            var orderedFields:Array<String> = [];
+
+                            for (change in copy) {
+                                var existing = mergedByField.get(change.field);
+                                if (existing == null) {
+                                    existing = {
+                                        timestamp: change.timestamp,
+                                        source: change.source,
+                                        field: change.field,
+                                        newValue: change.newValue,
+                                        oldValue: change.oldValue
+                                    };
+                                    mergedByField.set(change.field, existing);
+                                    orderedFields.push(change.field);
+                                } else {
+                                    existing.timestamp = change.timestamp;
+                                    existing.newValue = change.newValue;
+                                }
+                            }
+
+                            var merged:Array<observable.ChangeInfo<Any>> = [];
+                            for (field in orderedFields) {
+                                var item = mergedByField.get(field);
+                                if (item != null) {
+                                    merged.push(item);
+                                }
+                            }
+                            copy = merged;
+                        }
+
                         var changes = new observable.Changes();
                         changes.items = copy;
                         var listenersCopy = (changeListeners == null) ? [] : changeListeners.copy();
