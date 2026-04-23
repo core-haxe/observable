@@ -630,6 +630,16 @@ class ObservableBuilder {
                                     }
                                     var oldValue = $i{varName};
                                     $i{varName} = value;
+
+                                    if (oldValue != null) {
+                                        @:privateAccess oldValue.notifyChanged = null;
+                                        @:privateAccess oldValue.changeListeners = null;
+                                    }
+                                    if ($i{varName} != null) {
+                                        @:privateAccess $i{varName}.notifyChanged = this.notifyChanged;
+                                        @:privateAccess $i{varName}.changeListeners = this.changeListeners;
+                                    }
+
                                     notifyChanged(this, $v{field.name}, $i{varName}, oldValue);
                                     return value;
                                 },

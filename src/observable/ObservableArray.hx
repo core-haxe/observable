@@ -18,7 +18,7 @@ abstract ObservableArray<T>(ObservableArrayImpl<T>) {
     @:from
     private static inline function fromArray<T>(array:Array<T>):ObservableArray<T> {
         var observableArray = new ObservableArray();
-        @:privateAccess observableArray._array = array;
+        @:privateAccess observableArray._array = array.copy();
         @:privateAccess observableArray.updateChangeListeners();
         return observableArray;
     }
