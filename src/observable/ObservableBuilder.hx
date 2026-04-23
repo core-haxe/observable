@@ -131,6 +131,23 @@ class ObservableBuilder {
             }
         }
 
+        var existingChangesToNotifyIndex = TypeTools.findField(Context.getLocalClass().get(), "changesToNotifyIndex");
+        if (existingChangesToNotifyIndex == null) {
+            var changesToNotifyIndex = getField("changesToNotifyIndex", fields);
+            if (changesToNotifyIndex == null) {
+                changesToNotifyIndex = {
+                    name: "changesToNotifyIndex",
+                    access: [APrivate],
+                    kind: FVar(
+                        macro: haxe.ds.ObjectMap<Dynamic, Map<String, observable.ChangeInfo<Any>>>,
+                        macro new haxe.ds.ObjectMap()
+                    ),
+                    pos: Context.currentPos()
+                }
+                fields.push(changesToNotifyIndex);
+            }
+        }
+
         var existingWaitingForTick = TypeTools.findField(Context.getLocalClass().get(), "waitingForTick");
         if (existingWaitingForTick == null) {
             var waitingForTick = getField("waitingForTick", fields);
@@ -364,13 +381,40 @@ class ObservableBuilder {
                         }
 
                         if (groupObservableChanges) {
-                            changesToNotify.push({
-                                timestamp: Date.now().getTime(),
-                                source: source,
-                                field: field,
-                                newValue: newValue,
-                                oldValue: oldValue
-                            });
+                            var now = Date.now().getTime();
+
+                            if (observable.ObservableDefaults.EliminateDuplicates) {
+                                var byField = changesToNotifyIndex.get(source);
+                                if (byField == null) {
+                                    byField = new Map<String, observable.ChangeInfo<Any>>();
+                                    changesToNotifyIndex.set(source, byField);
+                                }
+
+                                var existing = byField.get(field);
+                                if (existing == null) {
+                                    existing = {
+                                        timestamp: now,
+                                        source: source,
+                                        field: field,
+                                        newValue: newValue,
+                                        oldValue: oldValue
+                                    };
+                                    byField.set(field, existing);
+                                    changesToNotify.push(existing);
+                                } else {
+                                    existing.timestamp = now;
+                                    existing.newValue = newValue;
+                                }
+                            } else {
+                                changesToNotify.push({
+                                    timestamp: now,
+                                    source: source,
+                                    field: field,
+                                    newValue: newValue,
+                                    oldValue: oldValue
+                                });
+                            }
+
                             if (!waitingForTick) {
                                 waitingForTick = true;
                                 observable.ObservableDefaults.onTick(onTick);
@@ -415,41 +459,11 @@ class ObservableBuilder {
             switch (onTick.kind) {
                 case FFun(f):
                     f.expr = macro {
-                        var copy = changesToNotify.copy();
+                        var copy = changesToNotify;
                         changesToNotify = [];
+                        changesToNotifyIndex = new haxe.ds.ObjectMap();
                         waitingForTick = false;
 
-                        if (observable.ObservableDefaults.EliminateDuplicates) {
-                            var mergedBySource = new haxe.ds.ObjectMap<Dynamic, Map<String, observable.ChangeInfo<Any>>>();
-                            var merged:Array<observable.ChangeInfo<Any>> = [];
-
-                            for (change in copy) {
-                                var byField = mergedBySource.get(change.source);
-                                if (byField == null) {
-                                    byField = new Map<String, observable.ChangeInfo<Any>>();
-                                    mergedBySource.set(change.source, byField);
-                                }
-
-                                var existing = byField.get(change.field);
-                                if (existing == null) {
-                                    existing = {
-                                        timestamp: change.timestamp,
-                                        source: change.source,
-                                        field: change.field,
-                                        newValue: change.newValue,
-                                        oldValue: change.oldValue
-                                    };
-                                    byField.set(change.field, existing);
-                                    merged.push(existing);
-                                } else {
-                                    existing.timestamp = change.timestamp;
-                                    existing.newValue = change.newValue;
-                                }
-                            }
-
-                            copy = merged;
-                        }
-                        
                         var changes = new observable.Changes();
                         changes.items = copy;
                         var listenersCopy = (changeListeners == null) ? [] : changeListeners.copy();
@@ -478,7 +492,7 @@ class ObservableBuilder {
         var observableSubObjects:Array<{name:String, expr:Expr, ?isDynamic:Bool}> = [];
 
         for (field in fields) {
-            if (field.name == "groupObservableChanges" || field.name == "changesToNotify" || field.name == "waitingForTick" || field.name == "_changeListeners") {
+            if (field.name == "groupObservableChanges" || field.name == "changesToNotify"|| field.name == "changesToNotifyIndex" || field.name == "waitingForTick" || field.name == "_changeListeners") {
                 continue;
             }
 
