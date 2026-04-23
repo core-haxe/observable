@@ -1,0 +1,6 @@
+common.hxml
+
+-D dump=pretty
+
+--js build/js/test-all.js
+--dce full
