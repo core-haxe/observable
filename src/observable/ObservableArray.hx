@@ -108,7 +108,12 @@ class ObservableArrayImpl<T> implements IObservable {
         _array.sort(cmp);
         notifyChanged(this, _fieldName, this, this);
     }
-        
+
+    public function splice(pos:Int, len:Int) {
+        _array.splice(pos, len);
+        notifyChanged(this, _fieldName, this, this);
+    }
+
     public function iterator():Iterator<T> {
         return _array.iterator();
     }
