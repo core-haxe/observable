@@ -104,6 +104,11 @@ class ObservableArrayImpl<T> implements IObservable {
         notifyChanged(this, _fieldName, this, this);
     }
 
+    public function sort(cmp:(T, T) -> Int) {
+        _array.sort(cmp);
+        notifyChanged(this, _fieldName, this, this);
+    }
+        
     public function iterator():Iterator<T> {
         return _array.iterator();
     }
