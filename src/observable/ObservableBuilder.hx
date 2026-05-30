@@ -300,7 +300,7 @@ class ObservableBuilder {
                             }
                             var toRemove = null;
                             for (item in _changeListeners) {
-                                if (item.listener == listener) {
+                                if (observable.ObservableUtils.isFunctionEqual(item.listener, listener)) {
                                     toRemove = item;
                                     break;
                                 }
