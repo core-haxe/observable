@@ -29,10 +29,11 @@ class Changes {
         _fieldList = [];
         
         for (item in _items) {
-            var list = _itemsMap.get(item.field);
+            var fieldKey = fieldMapKey(item.field);
+            var list = _itemsMap.get(fieldKey);
             if (list == null) {
                 list = [];
-                _itemsMap.set(item.field, list);
+                _itemsMap.set(fieldKey, list);
             }
             list.push(item);
             if (!_fieldList.contains(item.field)) {
@@ -51,6 +52,10 @@ class Changes {
 
     public function contains(field:String) {
         buildItemsMap();
-        return _itemsMap.exists(field);
+        return _itemsMap.exists(fieldMapKey(field));
+    }
+
+    private static function fieldMapKey(field:String):String {
+        return field == null ? "\x00" : field;
     }
 }

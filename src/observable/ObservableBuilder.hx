@@ -390,7 +390,8 @@ class ObservableBuilder {
                                     changesToNotifyIndex.set(source, byField);
                                 }
 
-                                var existing = byField.get(field);
+                                var fieldKey = (field == null) ? "\x00" : field;
+                                var existing = byField.get(fieldKey);
                                 if (existing == null) {
                                     existing = {
                                         timestamp: now,
@@ -399,7 +400,7 @@ class ObservableBuilder {
                                         newValue: newValue,
                                         oldValue: oldValue
                                     };
-                                    byField.set(field, existing);
+                                    byField.set(fieldKey, existing);
                                     changesToNotify.push(existing);
                                 } else {
                                     existing.timestamp = now;
