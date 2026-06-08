@@ -1,6 +1,36 @@
 package observable;
 
+import haxe.ds.ObjectMap;
 import observable.ObservableDynamic.ObservableDynamicImpl;
+
+private typedef ObservableArrayItemNotify = Any->String->Any->Any->Void;
+
+private typedef ObservableArrayItemAttachment = {
+    var listener:ObservableArrayItemNotify;
+    var count:Int;
+}
+
+private class ObservableArrayItemDispatcher {
+    public var originalNotifyChanged(default, null):ObservableArrayItemNotify;
+    public var notifyChanged(default, null):ObservableArrayItemNotify;
+    public var listeners(default, null):Array<ObservableArrayItemNotify> = [];
+
+    public function new(originalNotifyChanged:ObservableArrayItemNotify) {
+        this.originalNotifyChanged = originalNotifyChanged;
+        this.notifyChanged = dispatch;
+    }
+
+    private function dispatch(source:Any, field:String, newValue:Any, oldValue:Any):Void {
+        if (originalNotifyChanged != null) {
+            originalNotifyChanged(source, field, newValue, oldValue);
+        }
+
+        var listenersCopy = listeners.copy();
+        for (listener in listenersCopy) {
+            listener(source, field, newValue, oldValue);
+        }
+    }
+}
 
 @:forward
 @:forward.new
@@ -27,8 +57,12 @@ abstract ObservableArray<T>(ObservableArrayImpl<T>) {
 }
 
 class ObservableArrayImpl<T> implements IObservable {
+    private static var _itemDispatchers:ObjectMap<IObservable, ObservableArrayItemDispatcher> = new ObjectMap();
+
     private var _array:Array<T> = [];
     private var _fieldName:String = null;
+    private var _attachedItems:ObjectMap<IObservable, ObservableArrayItemAttachment> = null;
+    private var _itemChangeListener:ObservableArrayItemNotify = null;
 
     public function new() {
     }
@@ -40,33 +74,137 @@ class ObservableArrayImpl<T> implements IObservable {
 
     private function set_changeListeners(value:Array<{listener: Changes->Void}>):Array<{listener: Changes->Void}> {
         _changeListeners = value;
-        updateChangeListeners();
+        if (value == null) {
+            clearAttachedItems();
+        } else {
+            updateChangeListeners();
+        }
         return value;
     }
 
     private function updateChangeListeners() {
+        clearAttachedItems();
         if (_array != null) {
             for (item in _array) {
-                if (item is IObservable) {
-                    @:privateAccess cast(item, IObservable).notifyChanged = this.notifyChanged;
-                    @:privateAccess cast(item, IObservable).changeListeners = _changeListeners;
-                }
+                attachItem(item);
             }
         }
     }
 
-    private function attachItem(item:T):Void {
+    private function ensureAttachedItems():ObjectMap<IObservable, ObservableArrayItemAttachment> {
+        if (_attachedItems == null) {
+            _attachedItems = new ObjectMap();
+        }
+        return _attachedItems;
+    }
+
+    private function observableItem(item:T):IObservable {
         if (item is IObservable) {
-            @:privateAccess cast(item, IObservable).notifyChanged = this.notifyChanged;
-            @:privateAccess cast(item, IObservable).changeListeners = this.changeListeners;
+            return cast item;
+        }
+        return null;
+    }
+
+    private function itemChangeListener():ObservableArrayItemNotify {
+        if (_itemChangeListener == null) {
+            _itemChangeListener = onItemChanged;
+        }
+        return _itemChangeListener;
+    }
+
+    private function onItemChanged(source:Any, field:String, newValue:Any, oldValue:Any):Void {
+        if (notifyChanged != null) {
+            notifyChanged(source, field, newValue, oldValue);
         }
     }
 
-    private function detachItem(item:T):Void {
-        if (item is IObservable) {
-            @:privateAccess cast(item, IObservable).notifyChanged = null;
-            @:privateAccess cast(item, IObservable).changeListeners = null;
+    private static function addItemListener(observable:IObservable, listener:ObservableArrayItemNotify):Void {
+        var dispatcher = _itemDispatchers.get(observable);
+        if (dispatcher == null) {
+            dispatcher = new ObservableArrayItemDispatcher(@:privateAccess observable.notifyChanged);
+            _itemDispatchers.set(observable, dispatcher);
+            @:privateAccess observable.notifyChanged = dispatcher.notifyChanged;
         }
+        dispatcher.listeners.push(listener);
+    }
+
+    private static function removeItemListener(observable:IObservable, listener:ObservableArrayItemNotify):Void {
+        var dispatcher = _itemDispatchers.get(observable);
+        if (dispatcher == null) {
+            return;
+        }
+
+        var toRemove = null;
+        for (itemListener in dispatcher.listeners) {
+            if (ObservableUtils.isFunctionEqual(itemListener, listener)) {
+                toRemove = itemListener;
+                break;
+            }
+        }
+        if (toRemove != null) {
+            dispatcher.listeners.remove(toRemove);
+        }
+
+        if (dispatcher.listeners.length == 0) {
+            if (ObservableUtils.isFunctionEqual(@:privateAccess observable.notifyChanged, dispatcher.notifyChanged)) {
+                @:privateAccess observable.notifyChanged = dispatcher.originalNotifyChanged;
+            }
+            _itemDispatchers.remove(observable);
+        }
+    }
+
+    private function attachItem(item:T):Void {
+        var observable = observableItem(item);
+        if (observable == null) {
+            return;
+        }
+
+        var attachedItems = ensureAttachedItems();
+        var attachment = attachedItems.get(observable);
+        if (attachment != null) {
+            attachment.count++;
+            return;
+        }
+
+        var listener = itemChangeListener();
+        attachedItems.set(observable, {
+            listener: listener,
+            count: 1
+        });
+        addItemListener(observable, listener);
+    }
+
+    private function detachItem(item:T):Void {
+        var observable = observableItem(item);
+        if (observable == null || _attachedItems == null) {
+            return;
+        }
+
+        var attachment = _attachedItems.get(observable);
+        if (attachment == null) {
+            return;
+        }
+
+        attachment.count--;
+        if (attachment.count > 0) {
+            return;
+        }
+
+        removeItemListener(observable, attachment.listener);
+        _attachedItems.remove(observable);
+    }
+
+    private function clearAttachedItems():Void {
+        if (_attachedItems == null) {
+            return;
+        }
+        for (observable in _attachedItems.keys()) {
+            var attachment = _attachedItems.get(observable);
+            if (attachment != null) {
+                removeItemListener(observable, attachment.listener);
+            }
+        }
+        _attachedItems = null;
     }
 
     private function unwrapItem(item:Dynamic):Dynamic {
@@ -95,10 +233,6 @@ class ObservableArrayImpl<T> implements IObservable {
         return -1;
     }
 
-    private function containsExact(item:T):Bool {
-        return _array.contains(item);
-    }
-
     public function contains(item:T):Bool {
         return indexOfItem(item) != -1;
     }
@@ -111,11 +245,11 @@ class ObservableArrayImpl<T> implements IObservable {
         var oldItem = _array[index];
         _array[index] = item;
 
-        if (oldItem != null && oldItem != item && !containsExact(oldItem)) {
+        if (oldItem != item) {
             detachItem(oldItem);
+            attachItem(item);
         }
 
-        attachItem(item);
         notifyChanged(this, _fieldName, this, this);
     }
 
@@ -123,9 +257,7 @@ class ObservableArrayImpl<T> implements IObservable {
         var index = indexOfItem(item);
         if (index != -1) {
             var removedItem = _array.splice(index, 1)[0];
-            if (!containsExact(removedItem)) {
-                detachItem(removedItem);
-            }
+            detachItem(removedItem);
             notifyChanged(this, _fieldName, this, this);
             return true;
         }
@@ -144,7 +276,10 @@ class ObservableArrayImpl<T> implements IObservable {
     }
 
     public function splice(pos:Int, len:Int) {
-        _array.splice(pos, len);
+        var removedItems = _array.splice(pos, len);
+        for (item in removedItems) {
+            detachItem(item);
+        }
         notifyChanged(this, _fieldName, this, this);
     }
 
