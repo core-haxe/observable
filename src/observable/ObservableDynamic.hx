@@ -58,6 +58,7 @@ class ObservableDynamicImpl implements IObservable {
         notifyChanged(this, name, value, oldValue);
     }
 
+    @:keep
     public function toString():String {
         return Std.string(_object);
     }
