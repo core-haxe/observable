@@ -16,10 +16,22 @@ abstract ObservableDynamic(ObservableDynamicImpl) {
     }
 
     @:from
-    private static function fromDynamic(object:Dynamic):ObservableDynamic {
+    public static function fromDynamic(object:Dynamic):ObservableDynamic {
+        return fromValue(object);
+    }
+
+    public static function fromValue(object:Dynamic):ObservableDynamic {
+        if (object is ObservableDynamicImpl) {
+            return cast object;
+        }
+
         var observableDynamic = new ObservableDynamic();
         @:privateAccess observableDynamic._object = object;
         return observableDynamic;
+    }
+
+    public function unwrap():Dynamic {
+        return @:privateAccess this._object;
     }
 }
 
@@ -33,6 +45,10 @@ class ObservableDynamicImpl implements IObservable {
         return Reflect.getProperty(_object, name);
     }
 
+    public function unwrap():Dynamic {
+        return _object;
+    }
+
     public function set(name:String, value:Any) {
         var oldValue = get(name);
         if (oldValue == value) {
@@ -40,5 +56,9 @@ class ObservableDynamicImpl implements IObservable {
         }
         Reflect.setProperty(_object, name, value);
         notifyChanged(this, name, value, oldValue);
+    }
+
+    public function toString():String {
+        return Std.string(_object);
     }
 }

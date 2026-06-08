@@ -1,5 +1,7 @@
 package observable;
 
+import observable.ObservableDynamic.ObservableDynamicImpl;
+
 @:forward
 @:forward.new
 @:forward.variance
@@ -67,8 +69,38 @@ class ObservableArrayImpl<T> implements IObservable {
         }
     }
 
-    public function contains(item:T):Bool {
+    private function unwrapItem(item:Dynamic):Dynamic {
+        if (item is ObservableDynamicImpl) {
+            return @:privateAccess cast(item, ObservableDynamicImpl)._object;
+        }
+        return item;
+    }
+
+    private function itemMatches(a:Dynamic, b:Dynamic):Bool {
+        if (a == b) {
+            return true;
+        }
+        if (a is ObservableDynamicImpl || b is ObservableDynamicImpl) {
+            return unwrapItem(a) == unwrapItem(b);
+        }
+        return false;
+    }
+
+    private function indexOfItem(item:T):Int {
+        for (i in 0..._array.length) {
+            if (itemMatches(_array[i], item)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private function containsExact(item:T):Bool {
         return _array.contains(item);
+    }
+
+    public function contains(item:T):Bool {
+        return indexOfItem(item) != -1;
     }
 
     public function get(index:Int) {
@@ -79,7 +111,7 @@ class ObservableArrayImpl<T> implements IObservable {
         var oldItem = _array[index];
         _array[index] = item;
 
-        if (oldItem != null && oldItem != item && !_array.contains(oldItem)) {
+        if (oldItem != null && oldItem != item && !containsExact(oldItem)) {
             detachItem(oldItem);
         }
 
@@ -88,14 +120,16 @@ class ObservableArrayImpl<T> implements IObservable {
     }
 
     public function remove(item:T) {
-        var found = _array.remove(item);
-        if (found) {
-            if (!_array.contains(item)) {
-                detachItem(item);
+        var index = indexOfItem(item);
+        if (index != -1) {
+            var removedItem = _array.splice(index, 1)[0];
+            if (!containsExact(removedItem)) {
+                detachItem(removedItem);
             }
             notifyChanged(this, _fieldName, this, this);
+            return true;
         }
-        return found;
+        return false;
     }
 
     public function push(item:T) {
