@@ -264,6 +264,12 @@ class ObservableArrayImpl<T> implements IObservable {
         return false;
     }
 
+    public function insert(pos:Int, item:T):Void {
+        _array.insert(pos, item);
+        attachItem(item);
+        notifyChanged(this, _fieldName, this, this);
+    }
+
     public function push(item:T) {
         _array.push(item);
         attachItem(item);
