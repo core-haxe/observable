@@ -101,6 +101,38 @@ class TestArray extends Test {
         o1.objectArrayA[1].nullableStringValue = "change";
     }
 
+    function test_Normal_Array_Dynamic_Assignment_Wraps_Raw_Array(async:Async) {
+        withUngrouped(() -> {
+            var o1 = new ObservableObjectA();
+            var raw = [1, 2];
+            var parentChangeCount = 0;
+            var collectionChangeCount = 0;
+
+            o1.registerChangeListener((changes) -> {
+                if (findChange(changes, o1, "normalArray") != null) {
+                    parentChangeCount++;
+                }
+                if (o1.normalArray != null && findChange(changes, o1.normalArray, "normalArray") != null) {
+                    collectionChangeCount++;
+                }
+            });
+
+            Reflect.setProperty(o1, "normalArray", raw);
+
+            Assert.equals(1, parentChangeCount);
+            Assert.equals(0, collectionChangeCount);
+            Assert.equals(2, o1.normalArray.length);
+
+            raw.push(3);
+            Assert.equals(2, o1.normalArray.length);
+
+            o1.normalArray.push(4);
+            Assert.equals(1, collectionChangeCount);
+            Assert.equals(3, o1.normalArray.length);
+            async.done();
+        });
+    }
+
     function test_Observable_Array_Shared_Item_Notifies_All_Parents(async:Async) {
         withUngrouped(() -> {
             var item = new ObservableObjectA();
