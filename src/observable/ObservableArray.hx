@@ -286,4 +286,9 @@ class ObservableArrayImpl<T> implements IObservable {
     public function iterator():Iterator<T> {
         return _array.iterator();
     }
+
+    @:keep
+    public function toString():String {
+        return Std.string(_array);
+    }
 }
