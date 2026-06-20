@@ -590,7 +590,44 @@ class ObservableBuilder {
                     }
                     fieldsToAdd.push(newField);
 
-                    if (isArray(field) || isMap(field)) {
+                    if (isArray(field)) {
+                        observableSubObjects.push({name: varName, expr: e});
+                        var newField = {
+                            name: "set_" + field.name,
+                            access: [APrivate],
+                            kind: FFun({
+                                args:[{name: "value", type: newType}],
+                                expr: macro {
+                                    var normalizedValue:Dynamic = value;
+                                    if (normalizedValue is Array) {
+                                        var array:Array<Dynamic> = cast normalizedValue;
+                                        var observableArray:observable.ObservableArray<Dynamic> = array;
+                                        normalizedValue = observableArray;
+                                    }
+
+                                    if ($i{varName} == normalizedValue) {
+                                        return cast normalizedValue;
+                                    }
+                                    var oldValue = $i{varName};
+                                    $i{varName} = cast normalizedValue;
+                                    if (oldValue != null) {
+                                        @:privateAccess oldValue.notifyChanged = null;
+                                        @:privateAccess oldValue.changeListeners = null;
+                                    }
+                                    if ($i{varName} != null) {
+                                        @:privateAccess $i{varName}.notifyChanged = this.notifyChanged;
+                                        @:privateAccess $i{varName}.changeListeners = this.changeListeners;
+                                        @:privateAccess $i{varName}._fieldName = $v{field.name};
+                                    }
+                                    notifyChanged(this, $v{field.name}, $i{varName}, oldValue);
+                                    return cast normalizedValue;
+                                },
+                                ret: newType
+                            }),
+                            pos: Context.currentPos()
+                        }
+                        fieldsToAdd.push(newField);
+                    } else if (isMap(field)) {
                         observableSubObjects.push({name: varName, expr: e});
                         var newField = {
                             name: "set_" + field.name,
