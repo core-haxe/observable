@@ -23,11 +23,12 @@ class ObservableBuilder {
         buildNotifyChanged(fields);
         buildOnTick(fields);
 
-        var observableSubObjects:Array<{name:String, expr:Expr, ?isDynamic:Bool}> = [];
+        var observableSubObjects:Array<{name:String, fieldName:String, forwarderName:String, expr:Expr, ?isDynamic:Bool, ?isCollection:Bool}> = [];
         if (Context.getLocalClass().get().name != "ObservableArrayImpl" && Context.getLocalClass().get().name != "ObservableMapImpl" && Context.getLocalClass().get().name != "ObservableDynamicImpl") {
             observableSubObjects = buildObservableProperties(fields);
         }
 
+        buildObservableForwarders(fields, observableSubObjects);
         buildChangeListeners(fields, observableSubObjects);
         buildConstructor(fields, observableSubObjects);
 
@@ -49,7 +50,7 @@ class ObservableBuilder {
         return null;
     }
 
-    private static function buildConstructor(fields:Array<Field>, observableSubObjects:Array<{name:String, expr:Expr}>) {
+    private static function buildConstructor(fields:Array<Field>, observableSubObjects:Array<{name:String, fieldName:String, forwarderName:String, expr:Expr, ?isDynamic:Bool, ?isCollection:Bool}>) {
         var ctor = getField("new", fields);
         var assignmentExprs:Array<Expr> = [];
         for (observableSubObject in observableSubObjects) {
@@ -177,14 +178,41 @@ class ObservableBuilder {
         }
     }
 
-    private static function buildChangeListeners(fields:Array<Field>, observableSubObjects:Array<{name:String, expr:Expr, ?isDynamic:Bool}>) {
+    private static function buildObservableForwarders(fields:Array<Field>, observableSubObjects:Array<{name:String, fieldName:String, forwarderName:String, expr:Expr, ?isDynamic:Bool, ?isCollection:Bool}>) {
+        for (observableSubObject in observableSubObjects) {
+            if (getField(observableSubObject.forwarderName, fields) != null) {
+                continue;
+            }
+
+            var fieldName = observableSubObject.fieldName;
+            var isCollection = (observableSubObject.isCollection == true);
+            fields.push({
+                name: observableSubObject.forwarderName,
+                access: [APrivate],
+                kind: FFun({
+                    args:[
+                        {name: "source", type: macro: Any},
+                        {name: "field", type: macro: String},
+                        {name: "newValue", type: macro: Any},
+                        {name: "oldValue", type: macro: Any}
+                    ],
+                    expr: macro {
+                        notifyChanged(source, observable.ObservableUtils.forwardedFieldName($v{fieldName}, field, $v{isCollection}), newValue, oldValue);
+                    },
+                    ret: macro: Void
+                }),
+                pos: Context.currentPos()
+            });
+        }
+    }
+
+    private static function buildChangeListeners(fields:Array<Field>, observableSubObjects:Array<{name:String, fieldName:String, forwarderName:String, expr:Expr, ?isDynamic:Bool, ?isCollection:Bool}>) {
         var existing_changeListeners = TypeTools.findField(Context.getLocalClass().get(), "_changeListeners");
         var propagateExprs:Array<Expr> = [];
         for (observableSubObject in observableSubObjects) {
             propagateExprs.push(macro {
                 if ($i{observableSubObject.name} != null) {
-                    @:privateAccess $i{observableSubObject.name}.notifyChanged = this.notifyChanged;
-                    @:privateAccess $i{observableSubObject.name}.changeListeners = value;
+                    observable.ObservableUtils.addForwarder(cast $i{observableSubObject.name}, $i{observableSubObject.forwarderName});
                 }
             });
         }
@@ -258,6 +286,14 @@ class ObservableBuilder {
                     kind: FFun({
                         args:[{ name: "listener", type: macro: observable.Changes->Void}],
                         expr: macro {
+                            if (_changeListeners == null) {
+                                _changeListeners = [];
+                            }
+                            for (item in _changeListeners) {
+                                if (observable.ObservableUtils.isFunctionEqual(item.listener, listener)) {
+                                    return;
+                                }
+                            }
                             _changeListeners.push({ listener: listener });
                         }
                     }),
@@ -319,17 +355,6 @@ class ObservableBuilder {
         var registerChangeListener = getField("registerChangeListener", fields);
         if (registerChangeListener == null) {
             if (registerChangeListener == null) {
-                var exprs:Array<Expr> = [];
-                for (observableSubObject in observableSubObjects) {
-                    if (observableSubObject.isDynamic) {
-                        exprs.push(macro {
-                            if ($i{observableSubObject.name} != null) {
-                                @:privateAccess $i{observableSubObject.name}.registerChangeListener(listener);
-                            }
-                        });
-                    }
-                }
-
                 registerChangeListener = {
                     name: "registerChangeListener",
                     access: [APublic, AOverride],
@@ -337,9 +362,6 @@ class ObservableBuilder {
                         args:[{ name: "listener", type: macro: observable.Changes->Void}],
                         expr: macro {
                             super.registerChangeListener(listener);
-                            {
-                                $a{exprs}
-                            }
                         }
                     }),
                     pos: Context.currentPos()
@@ -477,7 +499,7 @@ class ObservableBuilder {
         }
     }
 
-    private static function buildObservableProperties(fields:Array<Field>):Array<{name:String, expr:Expr, ?isDynamic:Bool}> {
+    private static function buildObservableProperties(fields:Array<Field>):Array<{name:String, fieldName:String, forwarderName:String, expr:Expr, ?isDynamic:Bool, ?isCollection:Bool}> {
         var allowPublic:Bool = true;
         var allowPrivate:Bool = true;
         var defines = Context.getDefines();
@@ -490,7 +512,7 @@ class ObservableBuilder {
 
         var fieldsToAdd:Array<Field> = [];
         var fieldsToRemove:Array<Field> = [];
-        var observableSubObjects:Array<{name:String, expr:Expr, ?isDynamic:Bool}> = [];
+        var observableSubObjects:Array<{name:String, fieldName:String, forwarderName:String, expr:Expr, ?isDynamic:Bool, ?isCollection:Bool}> = [];
 
         for (field in fields) {
             if (field.name == "groupObservableChanges" || field.name == "changesToNotify"|| field.name == "changesToNotifyIndex" || field.name == "waitingForTick" || field.name == "_changeListeners") {
@@ -591,7 +613,8 @@ class ObservableBuilder {
                     fieldsToAdd.push(newField);
 
                     if (isArray(field)) {
-                        observableSubObjects.push({name: varName, expr: e});
+                        var forwarderName = "__observableForward_" + field.name;
+                        observableSubObjects.push({name: varName, fieldName: field.name, forwarderName: forwarderName, expr: e, isCollection: true});
                         var newField = {
                             name: "set_" + field.name,
                             access: [APrivate],
@@ -611,12 +634,10 @@ class ObservableBuilder {
                                     var oldValue = $i{varName};
                                     $i{varName} = cast normalizedValue;
                                     if (oldValue != null) {
-                                        @:privateAccess oldValue.notifyChanged = null;
-                                        @:privateAccess oldValue.changeListeners = null;
+                                        observable.ObservableUtils.removeForwarder(cast oldValue, $i{forwarderName});
                                     }
                                     if ($i{varName} != null) {
-                                        @:privateAccess $i{varName}.notifyChanged = this.notifyChanged;
-                                        @:privateAccess $i{varName}.changeListeners = this.changeListeners;
+                                        observable.ObservableUtils.addForwarder(cast $i{varName}, $i{forwarderName});
                                         @:privateAccess $i{varName}._fieldName = $v{field.name};
                                     }
                                     notifyChanged(this, $v{field.name}, $i{varName}, oldValue);
@@ -628,7 +649,8 @@ class ObservableBuilder {
                         }
                         fieldsToAdd.push(newField);
                     } else if (isMap(field)) {
-                        observableSubObjects.push({name: varName, expr: e});
+                        var forwarderName = "__observableForward_" + field.name;
+                        observableSubObjects.push({name: varName, fieldName: field.name, forwarderName: forwarderName, expr: e, isCollection: true});
                         var newField = {
                             name: "set_" + field.name,
                             access: [APrivate],
@@ -641,12 +663,10 @@ class ObservableBuilder {
                                     var oldValue = $i{varName};
                                     $i{varName} = value;
                                     if (oldValue != null) {
-                                        @:privateAccess oldValue.notifyChanged = null;
-                                        @:privateAccess oldValue.changeListeners = null;
+                                        observable.ObservableUtils.removeForwarder(cast oldValue, $i{forwarderName});
                                     }
                                     if ($i{varName} != null) {
-                                        @:privateAccess $i{varName}.notifyChanged = this.notifyChanged;
-                                        @:privateAccess $i{varName}.changeListeners = this.changeListeners;
+                                        observable.ObservableUtils.addForwarder(cast $i{varName}, $i{forwarderName});
                                         @:privateAccess $i{varName}._fieldName = $v{field.name};
                                     }
                                     notifyChanged(this, $v{field.name}, $i{varName}, oldValue);
@@ -658,7 +678,8 @@ class ObservableBuilder {
                         }
                         fieldsToAdd.push(newField);
                     } else if (isDynamic(field)) {
-                        observableSubObjects.push({name: varName, expr: e, isDynamic: true});
+                        var forwarderName = "__observableForward_" + field.name;
+                        observableSubObjects.push({name: varName, fieldName: field.name, forwarderName: forwarderName, expr: e, isDynamic: true});
                         var newField = {
                             name: "set_" + field.name,
                             access: [APrivate],
@@ -672,12 +693,10 @@ class ObservableBuilder {
                                     $i{varName} = value;
 
                                     if (oldValue != null) {
-                                        @:privateAccess oldValue.notifyChanged = null;
-                                        @:privateAccess oldValue.changeListeners = null;
+                                        observable.ObservableUtils.removeForwarder(cast oldValue, $i{forwarderName});
                                     }
                                     if ($i{varName} != null) {
-                                        @:privateAccess $i{varName}.notifyChanged = this.notifyChanged;
-                                        @:privateAccess $i{varName}.changeListeners = this.changeListeners;
+                                        observable.ObservableUtils.addForwarder(cast $i{varName}, $i{forwarderName});
                                     }
 
                                     notifyChanged(this, $v{field.name}, $i{varName}, oldValue);
@@ -689,7 +708,8 @@ class ObservableBuilder {
                         }
                         fieldsToAdd.push(newField);
                     } else if (isObservable(field)) {
-                        observableSubObjects.push({name: varName, expr: e});
+                        var forwarderName = "__observableForward_" + field.name;
+                        observableSubObjects.push({name: varName, fieldName: field.name, forwarderName: forwarderName, expr: e});
                         var newField = {
                             name: "set_" + field.name,
                             access: [APrivate],
@@ -702,12 +722,10 @@ class ObservableBuilder {
                                     var oldValue = $i{varName};
                                     $i{varName} = value;
                                     if (oldValue != null) {
-                                        @:privateAccess oldValue.notifyChanged = null;
-                                        @:privateAccess oldValue.changeListeners = null;
+                                        observable.ObservableUtils.removeForwarder(cast oldValue, $i{forwarderName});
                                     }
                                     if ($i{varName} != null) {
-                                        @:privateAccess $i{varName}.notifyChanged = this.notifyChanged;
-                                        @:privateAccess $i{varName}.changeListeners = this.changeListeners;
+                                        observable.ObservableUtils.addForwarder(cast $i{varName}, $i{forwarderName});
                                     }
                                     notifyChanged(this, $v{field.name}, $i{varName}, oldValue);
                                     return value;
