@@ -50,6 +50,14 @@ class ObservableBuilder {
         return null;
     }
 
+    private static function noCompletionMeta(?meta:Metadata):Metadata {
+        var result = (meta == null) ? [] : meta.copy();
+        if (!hasMeta("noCompletion", result)) {
+            result.push({name: ":noCompletion", params: [], pos: Context.currentPos()});
+        }
+        return result;
+    }
+
     private static function buildConstructor(fields:Array<Field>, observableSubObjects:Array<{name:String, fieldName:String, forwarderName:String, expr:Expr, ?isDynamic:Bool, ?isCollection:Bool}>) {
         var ctor = getField("new", fields);
         var assignmentExprs:Array<Expr> = [];
@@ -126,6 +134,7 @@ class ObservableBuilder {
                     name: "changesToNotify",
                     access: [APrivate],
                     kind: FVar(macro: Array<observable.ChangeInfo<Any>>, macro []),
+                    meta: noCompletionMeta(),
                     pos: Context.currentPos()
                 }
                 fields.push(changesToNotify);
@@ -143,6 +152,7 @@ class ObservableBuilder {
                         macro: haxe.ds.ObjectMap<Dynamic, Map<String, observable.ChangeInfo<Any>>>,
                         macro new haxe.ds.ObjectMap()
                     ),
+                    meta: noCompletionMeta(),
                     pos: Context.currentPos()
                 }
                 fields.push(changesToNotifyIndex);
@@ -157,6 +167,7 @@ class ObservableBuilder {
                     name: "waitingForTick",
                     access: [APrivate],
                     kind: FVar(macro: Bool, macro false),
+                    meta: noCompletionMeta(),
                     pos: Context.currentPos()
                 }
                 fields.push(waitingForTick);
@@ -201,6 +212,7 @@ class ObservableBuilder {
                     },
                     ret: macro: Void
                 }),
+                meta: noCompletionMeta(),
                 pos: Context.currentPos()
             });
         }
@@ -223,6 +235,7 @@ class ObservableBuilder {
                     name: "_changeListeners",
                     access: [APrivate],
                     kind: FVar(macro: Array<{listener: observable.Changes->Void}>, macro []),
+                    meta: noCompletionMeta(),
                     pos: Context.currentPos()
                 }
                 fields.push(_changeListeners);
@@ -234,6 +247,7 @@ class ObservableBuilder {
                     name: "changeListeners",
                     access: [APrivate],
                     kind: FProp("get", "set", macro: Array<{listener: observable.Changes->Void}>),
+                    meta: noCompletionMeta(),
                     pos: Context.currentPos()
                 }
                 fields.push(changeListeners);
@@ -250,6 +264,7 @@ class ObservableBuilder {
                             return _changeListeners;
                         }
                     }),
+                    meta: noCompletionMeta(),
                     pos: Context.currentPos()
                 }
                 fields.push(get_changeListeners);
@@ -270,6 +285,7 @@ class ObservableBuilder {
                             return value;
                         }
                     }),
+                    meta: noCompletionMeta(),
                     pos: Context.currentPos()
                 }
                 fields.push(set_changeListeners);
@@ -316,6 +332,7 @@ class ObservableBuilder {
                         return value;
                     }
                 }),
+                meta: noCompletionMeta(),
                 pos: Context.currentPos()
             }
             fields.push(set_changeListeners);
@@ -390,6 +407,7 @@ class ObservableBuilder {
                         ],
                         expr: macro {}
                     }),
+                    meta: noCompletionMeta(),
                     pos: Context.currentPos()
                 }
                 fields.push(notifyChanged);
@@ -474,6 +492,7 @@ class ObservableBuilder {
                         args:[],
                         expr: macro {}
                     }),
+                    meta: noCompletionMeta(),
                     pos: Context.currentPos()
                 }
                 fields.push(onTick);
@@ -586,6 +605,7 @@ class ObservableBuilder {
                         name: varName,
                         access: [APrivate],
                         kind: FVar(newType, e),
+                        meta: noCompletionMeta(),
                         pos: Context.currentPos()
                     }
                     fieldsToAdd.push(newField);
@@ -608,6 +628,7 @@ class ObservableBuilder {
                             },
                             ret: newType
                         }),
+                        meta: noCompletionMeta(),
                         pos: Context.currentPos()
                     }
                     fieldsToAdd.push(newField);
@@ -645,6 +666,7 @@ class ObservableBuilder {
                                 },
                                 ret: newType
                             }),
+                            meta: noCompletionMeta(),
                             pos: Context.currentPos()
                         }
                         fieldsToAdd.push(newField);
@@ -674,6 +696,7 @@ class ObservableBuilder {
                                 },
                                 ret: newType
                             }),
+                            meta: noCompletionMeta(),
                             pos: Context.currentPos()
                         }
                         fieldsToAdd.push(newField);
@@ -704,6 +727,7 @@ class ObservableBuilder {
                                 },
                                 ret: t
                             }),
+                            meta: noCompletionMeta(),
                             pos: Context.currentPos()
                         }
                         fieldsToAdd.push(newField);
@@ -732,6 +756,7 @@ class ObservableBuilder {
                                 },
                                 ret: t
                             }),
+                            meta: noCompletionMeta(),
                             pos: Context.currentPos()
                         }
                         fieldsToAdd.push(newField);
@@ -752,6 +777,7 @@ class ObservableBuilder {
                                 },
                                 ret: t
                             }),
+                            meta: noCompletionMeta(),
                             pos: Context.currentPos()
                         }
                         fieldsToAdd.push(newField);
