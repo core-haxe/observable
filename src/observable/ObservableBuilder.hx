@@ -9,6 +9,21 @@ import haxe.macro.Expr.Field;
 import haxe.macro.Expr;
 import haxe.macro.Context;
 import haxe.macro.ComplexTypeTools;
+
+private enum ComputedDependency {
+    Field(name:String);
+    NestedField(name:String, child:String);
+    CollectionStructure(name:String);
+    CollectionItem(name:String, child:String);
+    CollectionAny(name:String);
+}
+
+private typedef ComputedProperty = {
+    var name:String;
+    var type:ComplexType;
+    var getter:String;
+    var dependencies:Array<ComputedDependency>;
+}
 #end
 
 class ObservableBuilder {
@@ -18,6 +33,8 @@ class ObservableBuilder {
         }
 
         var fields = Context.getBuildFields();
+
+        var computedProperties = analyzeComputedProperties(fields);
 
         buildVars(fields);
         buildNotifyChanged(fields);
@@ -31,6 +48,7 @@ class ObservableBuilder {
         buildObservableForwarders(fields, observableSubObjects);
         buildChangeListeners(fields, observableSubObjects);
         buildConstructor(fields, observableSubObjects);
+        buildComputedProperties(fields, computedProperties);
 
         return fields;
     }
@@ -56,6 +74,342 @@ class ObservableBuilder {
             result.push({name: ":noCompletion", params: [], pos: Context.currentPos()});
         }
         return result;
+    }
+
+    private static function analyzeComputedProperties(fields:Array<Field>):Array<ComputedProperty> {
+        var result:Array<ComputedProperty> = [];
+        var modelFields:Map<String, Field> = new Map();
+        for (field in fields) {
+            switch (field.kind) {
+                case FVar(_, _), FProp(_, _, _, _): modelFields.set(field.name, field);
+                case _:
+            }
+        }
+        var superclass = Context.getLocalClass().get().superClass;
+        while (superclass != null) {
+            var parent = superclass.t.get();
+            for (inherited in parent.fields.get()) {
+                if (!inherited.isPublic || modelFields.exists(inherited.name)) continue;
+                switch (inherited.kind) {
+                    case FVar(_, _):
+                        modelFields.set(inherited.name, {
+                            name: inherited.name,
+                            access: [APublic],
+                            kind: FVar(TypeTools.toComplexType(inherited.type)),
+                            pos: inherited.pos
+                        });
+                    case _:
+                }
+            }
+            superclass = parent.superClass;
+        }
+
+        for (property in fields) {
+            if (!hasMeta("computed", property.meta)) {
+                continue;
+            }
+            var propertyType = switch (property.kind) {
+                case FProp("get", "never", t, _): t;
+                case _:
+                    Context.error("@:computed requires a read-only getter property", property.pos);
+                    null;
+            }
+            var getterName = "get_" + property.name;
+            var getter = getField(getterName, fields);
+            if (getter == null) {
+                Context.error("@:computed requires " + getterName + "()", property.pos);
+            }
+            var body = switch (getter.kind) {
+                case FFun(fn): fn.expr;
+                case _:
+                    Context.error(getterName + " must be a function", getter.pos);
+                    null;
+            }
+
+            var dependencies:Array<ComputedDependency> = [];
+            collectComputedDependencies(body, modelFields, new Map(), new Map(), dependencies);
+            var explicitDependencies = getMeta("dependsOn", property.meta);
+            if (explicitDependencies != null) {
+                for (expression in explicitDependencies.params) {
+                    var inferred:Array<ComputedDependency> = [];
+                    collectComputedDependencies(expression, modelFields, new Map(), new Map(), inferred);
+                    if (inferred.length == 0) {
+                        Context.error("Cannot resolve @:dependsOn entry for " + property.name, expression.pos);
+                    }
+                    for (dependency in inferred) addComputedDependency(dependencies, dependency);
+                }
+            }
+            if (dependencies.length == 0) {
+                Context.error("Cannot infer dependencies for " + property.name + "; read an observable field or use @:dependsOn", property.pos);
+            }
+            for (dependency in dependencies) {
+                if (computedDependencyRoot(dependency) == property.name) {
+                    Context.error("Computed property " + property.name + " cannot depend on itself", property.pos);
+                }
+            }
+            result.push({name: property.name, type: propertyType, getter: getterName, dependencies: dependencies});
+        }
+        rejectComputedCycles(result, fields);
+        return result;
+    }
+
+    private static function rejectComputedCycles(properties:Array<ComputedProperty>, fields:Array<Field>) {
+        var byName:Map<String, ComputedProperty> = new Map();
+        var states:Map<String, Int> = new Map();
+        for (property in properties) byName.set(property.name, property);
+
+        var visit:String->Void = null;
+        visit = function(name:String):Void {
+            var state = states.get(name);
+            if (state == 2) return;
+            if (state == 1) {
+                Context.error("Circular @:computed dependency involving " + name, getField(name, fields).pos);
+            }
+            states.set(name, 1);
+            for (dependency in byName.get(name).dependencies) {
+                var upstream = computedDependencyRoot(dependency);
+                if (upstream != null && byName.exists(upstream)) visit(upstream);
+            }
+            states.set(name, 2);
+        }
+        for (property in properties) visit(property.name);
+    }
+
+    private static function computedDependencyRoot(dependency:ComputedDependency):String {
+        return switch (dependency) {
+            case Field(name), NestedField(name, _), CollectionStructure(name), CollectionItem(name, _), CollectionAny(name): name;
+        }
+    }
+
+    private static function collectComputedDependencies(expr:Expr, modelFields:Map<String, Field>, locals:Map<String, Bool>, loopSources:Map<String, String>, dependencies:Array<ComputedDependency>) {
+        if (expr == null) return;
+
+        switch (expr.expr) {
+            case EBlock(expressions):
+                var blockLocals = copyMap(locals);
+                for (expression in expressions) {
+                    collectComputedDependencies(expression, modelFields, blockLocals, loopSources, dependencies);
+                }
+
+            case EVars(vars):
+                for (variable in vars) {
+                    collectComputedDependencies(variable.expr, modelFields, locals, loopSources, dependencies);
+                    locals.set(variable.name, true);
+                }
+
+            case EFor(iterator, body):
+                switch (iterator.expr) {
+                    case EBinop(OpIn, variable, collection):
+                        var collectionName = readModelField(collection, modelFields, locals);
+                        var variableName = switch (variable.expr) {
+                            case EConst(CIdent(name)): name;
+                            case _: null;
+                        }
+                        if (collectionName != null && isCollectionType(modelFields.get(collectionName)) && variableName != null) {
+                            addComputedDependency(dependencies, CollectionStructure(collectionName));
+                            var bodyLocals = copyMap(locals);
+                            var bodySources = copyMap(loopSources);
+                            bodyLocals.set(variableName, true);
+                            bodySources.set(variableName, collectionName);
+                            collectComputedDependencies(body, modelFields, bodyLocals, bodySources, dependencies);
+                        } else {
+                            collectComputedDependencies(iterator, modelFields, locals, loopSources, dependencies);
+                            collectComputedDependencies(body, modelFields, copyMap(locals), loopSources, dependencies);
+                        }
+                    case _:
+                        collectComputedDependencies(iterator, modelFields, locals, loopSources, dependencies);
+                        collectComputedDependencies(body, modelFields, copyMap(locals), loopSources, dependencies);
+                }
+
+            case EField(base, member, _):
+                var loopName = readIdentifier(base);
+                if (loopName != null && loopSources.exists(loopName)) {
+                    addComputedDependency(dependencies, CollectionItem(loopSources.get(loopName), member));
+                    return;
+                }
+                var ownerName = readModelField(base, modelFields, locals);
+                if (ownerName != null) {
+                    if (isCollectionType(modelFields.get(ownerName))) {
+                        addComputedDependency(dependencies, member == "length" ? CollectionStructure(ownerName) : CollectionAny(ownerName));
+                    } else {
+                        addComputedDependency(dependencies, NestedField(ownerName, member));
+                    }
+                    return;
+                }
+                if (isThis(base) && modelFields.exists(member)) {
+                    addDirectComputedDependency(dependencies, member, modelFields);
+                    return;
+                }
+                collectComputedDependencies(base, modelFields, locals, loopSources, dependencies);
+
+            case EConst(CIdent(name)):
+                if (loopSources.exists(name)) {
+                    addComputedDependency(dependencies, CollectionAny(loopSources.get(name)));
+                } else if (!locals.exists(name) && modelFields.exists(name)) {
+                    addDirectComputedDependency(dependencies, name, modelFields);
+                }
+
+            case EFunction(_, fn):
+                var functionLocals = copyMap(locals);
+                for (arg in fn.args) functionLocals.set(arg.name, true);
+                collectComputedDependencies(fn.expr, modelFields, functionLocals, loopSources, dependencies);
+
+            case _:
+                ExprTools.iter(expr, child -> collectComputedDependencies(child, modelFields, locals, loopSources, dependencies));
+        }
+    }
+
+    private static function addDirectComputedDependency(dependencies:Array<ComputedDependency>, name:String, modelFields:Map<String, Field>) {
+        addComputedDependency(dependencies, isCollectionType(modelFields.get(name)) ? CollectionAny(name) : Field(name));
+    }
+
+    private static function addComputedDependency(dependencies:Array<ComputedDependency>, dependency:ComputedDependency) {
+        var key = Std.string(dependency);
+        for (existing in dependencies) {
+            if (Std.string(existing) == key) return;
+        }
+        dependencies.push(dependency);
+    }
+
+    private static function readModelField(expr:Expr, modelFields:Map<String, Field>, locals:Map<String, Bool>):String {
+        if (expr == null) return null;
+        return switch (expr.expr) {
+            case EConst(CIdent(name)) if (!locals.exists(name) && modelFields.exists(name)): name;
+            case EField(base, name, _) if (isThis(base) && modelFields.exists(name)): name;
+            case EParenthesis(inner): readModelField(inner, modelFields, locals);
+            case _: null;
+        }
+    }
+
+    private static function readIdentifier(expr:Expr):String {
+        if (expr == null) return null;
+        return switch (expr.expr) {
+            case EConst(CIdent(name)): name;
+            case EParenthesis(inner): readIdentifier(inner);
+            case _: null;
+        }
+    }
+
+    private static function isThis(expr:Expr):Bool {
+        return readIdentifier(expr) == "this";
+    }
+
+    private static function isCollectionType(field:Field):Bool {
+        if (field == null) return false;
+        var type = switch (field.kind) {
+            case FVar(t, _), FProp(_, _, t, _): t;
+            case _: null;
+        }
+        return switch (type) {
+            case TPath(path): path.name == "Array" || path.name == "ObservableArray";
+            case _: false;
+        }
+    }
+
+    private static function copyMap<T>(source:Map<String, T>):Map<String, T> {
+        var copy:Map<String, T> = new Map();
+        for (key in source.keys()) copy.set(key, source.get(key));
+        return copy;
+    }
+
+    private static function buildComputedProperties(fields:Array<Field>, properties:Array<ComputedProperty>) {
+        if (properties.length == 0) return;
+
+        var classSuffix = StringTools.replace(Context.getLocalClass().toString(), ".", "_");
+        var changeMethodName = "__observableComputedChanged_" + classSuffix;
+        var initializers:Array<Expr> = [];
+        var checks:Array<Expr> = [];
+        for (property in properties) {
+            var valueName = "__observableComputedValue_" + classSuffix + "_" + property.name;
+            if (getField(valueName, fields) != null) {
+                Context.error("Reserved computed property field already exists: " + valueName, Context.currentPos());
+            }
+            fields.push({
+                name: valueName,
+                access: [APrivate],
+                kind: FVar(property.type),
+                meta: noCompletionMeta(),
+                pos: Context.currentPos()
+            });
+            initializers.push(macro $i{valueName} = $i{property.getter}());
+
+            var condition:Expr = macro false;
+            for (dependency in property.dependencies) {
+                var next = computedDependencyCondition(dependency);
+                condition = macro ($e{condition} || $e{next});
+            }
+            checks.push(macro {
+                if ($e{condition}) {
+                    var nextValue = $i{property.getter}();
+                    if (nextValue != $i{valueName}) {
+                        var previousValue = $i{valueName};
+                        $i{valueName} = nextValue;
+                        notifyChanged(this, $v{property.name}, nextValue, previousValue);
+                    }
+                }
+            });
+        }
+
+        fields.push({
+            name: changeMethodName,
+            access: [APrivate],
+            kind: FFun({
+                args: [
+                    {name: "source", type: macro: Any},
+                    {name: "field", type: macro: String}
+                ],
+                ret: macro: Void,
+                expr: macro { $a{checks} }
+            }),
+            meta: noCompletionMeta(),
+            pos: Context.currentPos()
+        });
+
+        var constructor = getField("new", fields);
+        switch (constructor.kind) {
+            case FFun(fn):
+                switch (fn.expr.expr) {
+                    case EBlock(expressions):
+                        for (initializer in initializers) expressions.push(initializer);
+                        expressions.push(macro {
+                            var previousNotify = @:privateAccess this.notifyChanged;
+                            @:privateAccess this.notifyChanged = function(source:Any, field:String, newValue:Any, oldValue:Any):Void {
+                                $i{changeMethodName}(source, field);
+                                previousNotify(source, field, newValue, oldValue);
+                            };
+                        });
+                    case _:
+                        Context.error("@:computed requires a block constructor", constructor.pos);
+                }
+            case _:
+                Context.error("@:computed requires a constructor", constructor.pos);
+        }
+    }
+
+    private static function computedDependencyCondition(dependency:ComputedDependency):Expr {
+        return switch (dependency) {
+            case Field(name):
+                macro (source == this && field == $v{name});
+
+            case NestedField(name, child):
+                var path = name + "." + child;
+                macro ((source == this && field == $v{name})
+                    || (field != null && (field == $v{path} || StringTools.startsWith(field, $v{path + "."}))));
+
+            case CollectionStructure(name):
+                macro ((source == this && field == $v{name})
+                    || ($i{name} != null && source == (cast $i{name})));
+
+            case CollectionItem(name, child):
+                macro ($i{name} != null && source != this && source != (cast $i{name})
+                    && $i{name}.contains(cast source)
+                    && field != null && (field == $v{child} || StringTools.startsWith(field, $v{child + "."})));
+
+            case CollectionAny(name):
+                macro ((source == this && field == $v{name})
+                    || ($i{name} != null && (source == (cast $i{name})
+                        || (source != this && $i{name}.contains(cast source)))));
+        }
     }
 
     private static function buildConstructor(fields:Array<Field>, observableSubObjects:Array<{name:String, fieldName:String, forwarderName:String, expr:Expr, ?isDynamic:Bool, ?isCollection:Bool}>) {
