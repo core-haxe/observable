@@ -289,6 +289,10 @@ class ObservableArrayImpl<T> implements IObservable {
         notifyChanged(this, _fieldName, this, this);
     }
 
+    public function map<U>(fn:T->U):Array<U> {
+        return _array.map(fn);
+    }
+
     public function iterator():Iterator<T> {
         return _array.iterator();
     }
