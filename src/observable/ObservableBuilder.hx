@@ -888,6 +888,11 @@ class ObservableBuilder {
         var observableSubObjects:Array<{name:String, fieldName:String, forwarderName:String, expr:Expr, ?isDynamic:Bool, ?isCollection:Bool}> = [];
 
         for (field in fields) {
+            // Observability is per instance; leave static fields unchanged.
+            if (field.access != null && field.access.contains(AStatic)) {
+                continue;
+            }
+
             if (field.name == "groupObservableChanges" || field.name == "changesToNotify"|| field.name == "changesToNotifyIndex" || field.name == "waitingForTick" || field.name == "_changeListeners") {
                 continue;
             }
