@@ -23,8 +23,8 @@ class TestSubObject extends Test {
         o1.registerChangeListener((changes) -> {
             Assert.equals(3, changes.items.length);
             assertChangesContains(changes, o1, "subObjectA", o1.subObjectA, null);
-            assertChangesContains(changes, o1.subObjectA, "nullableIntValue", 111, null);
-            assertChangesContains(changes, o1.subObjectA, "intValueWithDefault", 222, 111);
+            assertChangesContains(changes, o1.subObjectA, "subObjectA.nullableIntValue", 111, null);
+            assertChangesContains(changes, o1.subObjectA, "subObjectA.intValueWithDefault", 222, 111);
             async.done();
         });
 
@@ -43,8 +43,8 @@ class TestSubObject extends Test {
             assertChangesContains(changes, o1.subObjectA.subObjectA.subObjectA, "subObjectA", o1.subObjectA.subObjectA.subObjectA.subObjectA, null);
             assertChangesContains(changes, o1.subObjectA.subObjectA.subObjectA.subObjectA, "subObjectA", o1.subObjectA.subObjectA.subObjectA.subObjectA.subObjectA, null);
             assertChangesContains(changes, o1.subObjectA.subObjectA.subObjectA.subObjectA.subObjectA, "subObjectA", o1.subObjectA.subObjectA.subObjectA.subObjectA.subObjectA.subObjectA, null);
-            assertChangesContains(changes, o1.subObjectA.subObjectA.subObjectA.subObjectA.subObjectA.subObjectA, "subObjectB", o1.subObjectA.subObjectA.subObjectA.subObjectA.subObjectA.subObjectA.subObjectB, null);
-            assertChangesContains(changes, o1.subObjectA.subObjectA.subObjectA.subObjectA.subObjectA.subObjectA.subObjectB, "intValue", 555, 444);
+            assertChangesContains(changes, o1.subObjectA.subObjectA.subObjectA.subObjectA.subObjectA.subObjectA, "subObjectA.subObjectB", o1.subObjectA.subObjectA.subObjectA.subObjectA.subObjectA.subObjectA.subObjectB, null);
+            assertChangesContains(changes, o1.subObjectA.subObjectA.subObjectA.subObjectA.subObjectA.subObjectA.subObjectB, "subObjectA.subObjectB.intValue", 555, 444);
             async.done();
         });
 
@@ -62,7 +62,7 @@ class TestSubObject extends Test {
         var o1 = new ObservableObjectA();
         o1.registerChangeListener((changes) -> {
             Assert.equals(1, changes.items.length);
-            assertChangesContains(changes, o1.subObjectAWithDefault, "intValue", 555, 444);
+            assertChangesContains(changes, o1.subObjectAWithDefault, "subObjectAWithDefault.intValue", 555, 444);
             async.done();
         });
 
