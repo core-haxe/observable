@@ -22,6 +22,7 @@ class TestAll {
         runner.addCase(new cases.basic.TestBasic());
         runner.addCase(new cases.basic.TestSubObject());
         runner.addCase(new cases.basic.TestArray());
+        runner.addCase(new cases.basic.TestSubscriptions());
         runner.addCase(new cases.basic.TestMap());
         runner.addCase(new cases.basic.TestComputed());
     }
