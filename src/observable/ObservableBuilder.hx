@@ -573,6 +573,20 @@ class ObservableBuilder {
     }
 
     private static function buildChangeListeners(fields:Array<Field>, observableSubObjects:Array<{name:String, fieldName:String, forwarderName:String, expr:Expr, ?isDynamic:Bool, ?isCollection:Bool}>) {
+        if (TypeTools.findField(Context.getLocalClass().get(), "onObservationChanged") == null && !hasField("onObservationChanged", fields)) {
+            fields.push({
+                name: "onObservationChanged",
+                access: [APrivate],
+                kind: FFun({
+                    args: [{name: "observed", type: macro: Bool}],
+                    ret: macro: Void,
+                    expr: macro {}
+                }),
+                meta: noCompletionMeta(),
+                pos: Context.currentPos()
+            });
+        }
+
         var existing_changeListeners = TypeTools.findField(Context.getLocalClass().get(), "_changeListeners");
         var propagateExprs:Array<Expr> = [];
         for (observableSubObject in observableSubObjects) {
@@ -632,10 +646,13 @@ class ObservableBuilder {
                     kind: FFun({
                         args:[{ name: "value", type: macro: Array<{listener: observable.Changes->Void}>}],
                         expr: macro {
+                            var wasObserved = observable.ObservableUtils.hasObservers(this);
                             _changeListeners = value;
                             {
                                 $a{propagateExprs}
                             }
+                            var observed = observable.ObservableUtils.hasObservers(this);
+                            if (wasObserved != observed) onObservationChanged(observed);
                             return value;
                         }
                     }),
@@ -664,7 +681,9 @@ class ObservableBuilder {
                                     return;
                                 }
                             }
+                            var wasObserved = observable.ObservableUtils.hasObservers(this);
                             _changeListeners.push({ listener: listener });
+                            if (!wasObserved) onObservationChanged(true);
                         }
                     }),
                     pos: Context.currentPos()
@@ -714,6 +733,7 @@ class ObservableBuilder {
                             }
                             if (toRemove != null) {
                                 _changeListeners.remove(toRemove);
+                                if (!observable.ObservableUtils.hasObservers(this)) onObservationChanged(false);
                             }
                         }
                     }),

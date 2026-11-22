@@ -10,8 +10,8 @@ import observable.ObservableUtils;
 import utest.Assert;
 import utest.Test;
 
-// Characterize today's lifecycle and delivery order. Tests named "Currently"
-// document existing limitations, not the desired subscription policy.
+// Collections observe their items while they have direct or forwarding consumers.
+// Forwarding is synchronous; grouped consumer callbacks keep their tick boundary.
 class TestSubscriptions extends Test {
     private function withSubscriptions(grouped:Bool, run:SubscriptionFixture->Void) {
         var previousTick = ObservableDefaults.onTick;
@@ -37,20 +37,21 @@ class TestSubscriptions extends Test {
         ObservableDefaults.EliminateDuplicates = previousDuplicates;
     }
 
-    function test_ArrayCurrentlyAttachesBeforeSubscriptionAndRetainsItemsAfterLastUnsubscribe() {
+    function test_ArrayAttachesOnFirstSubscriptionAndReleasesItemsAfterLastUnsubscribe() {
         for (grouped in [false, true]) withSubscriptions(grouped, f -> {
             var item = f.item();
             var items = f.array([item]);
-            Assert.isTrue(f.tracks(items, item));
+            Assert.isFalse(f.tracks(items, item));
             var calls = 0;
             var listener = (_:Changes) -> calls++;
             f.listen(cast items, listener);
+            Assert.isTrue(f.tracks(items, item));
             item.value = 1;
             f.flush();
             Assert.equals(1, calls);
 
             items.unregisterChangeListener(listener);
-            Assert.isTrue(f.tracks(items, item));
+            Assert.isFalse(f.tracks(items, item));
             item.value = 2;
             Assert.equals(0, f.pending.length);
             f.flush();
@@ -104,9 +105,10 @@ class TestSubscriptions extends Test {
             f.flush();
             Assert.equals(0, calls);
             Assert.isFalse(f.tracks(items, oldItem));
-            Assert.isTrue(f.tracks(items, replacement));
+            Assert.isFalse(f.tracks(items, replacement));
 
             items.registerChangeListener(listener);
+            Assert.isTrue(f.tracks(items, replacement));
             oldItem.value = 2;
             f.flush();
             Assert.equals(0, calls);
@@ -116,7 +118,7 @@ class TestSubscriptions extends Test {
         });
     }
 
-    function test_ExplicitListenerClearCurrentlyDoesNotReattachExistingItemsOnRegistration() {
+    function test_ExplicitListenerClearReattachesCurrentItemsOnResubscription() {
         for (grouped in [false, true]) withSubscriptions(grouped, f -> {
             var original = f.item();
             var inserted = f.item();
@@ -124,24 +126,23 @@ class TestSubscriptions extends Test {
             var calls = 0;
             var listener = (_:Changes) -> calls++;
             f.listen(cast items, listener);
-            // This is the cleanup operation currently used by ItemContainer.
             @:privateAccess cast(items, ObservableArrayImpl<Dynamic>).set_changeListeners(null);
             Assert.isFalse(f.tracks(items, original));
 
             items.registerChangeListener(listener);
             original.value = 1;
             f.flush();
-            Assert.equals(0, calls);
-            Assert.isFalse(f.tracks(items, original));
+            Assert.equals(1, calls);
+            Assert.isTrue(f.tracks(items, original));
             items.push(inserted);
             f.flush();
-            Assert.equals(1, calls);
+            Assert.equals(2, calls);
             inserted.value = 1;
             original.value = 2;
             f.flush();
-            Assert.equals(2, calls);
+            Assert.equals(grouped ? 3 : 4, calls);
             Assert.isTrue(f.tracks(items, inserted));
-            Assert.isFalse(f.tracks(items, original));
+            Assert.isTrue(f.tracks(items, original));
         });
     }
 
@@ -247,6 +248,8 @@ class TestSubscriptions extends Test {
             Assert.equals(1, parentCalls);
             Assert.equals(0, directCalls);
             Assert.isTrue(f.tracks(items, item));
+            parent.items = null;
+            Assert.isFalse(f.tracks(items, item));
         });
     }
 
@@ -313,7 +316,7 @@ class TestSubscriptions extends Test {
         });
     }
 
-    function test_ArrayAndObjectForwardersCurrentlyDispatchInGroupsBasedOnFirstAttachment() {
+    function test_ArrayAndObjectForwardersDispatchInConnectionRegistrationOrder() {
         for (grouped in [false, true]) for (arrayFirst in [false, true]) withSubscriptions(grouped, f -> {
             var item = f.item();
             var trace:Array<String> = [];
@@ -331,9 +334,9 @@ class TestSubscriptions extends Test {
                 if (arrayFirst) { addArray(); addParent(); }
                 else { addParent(); addArray(); }
             }
-            // The two dispatcher layers group their listeners. They currently
-            // do not interleave in the overall connection-registration order.
-            var expected = arrayFirst ? "item,array1,array2,parent1,parent2" : "item,parent1,parent2,array1,array2";
+            // The original item handler runs first, then all forwarding consumers
+            // in connection-registration order, regardless of their type.
+            var expected = arrayFirst ? "item,array1,parent1,array2,parent2" : "item,parent1,array1,parent2,array2";
             item.value = 1;
             Assert.equals(grouped ? "" : expected, trace.join(","));
             f.flushOne();
@@ -396,7 +399,7 @@ class TestSubscriptions extends Test {
         });
     }
 
-    function test_MapCurrentlyReplacesAnItemsDirectAndArrayNotificationPaths() {
+    function test_MapPreservesAnItemsDirectAndArrayNotificationPaths() {
         for (grouped in [false, true]) withSubscriptions(grouped, f -> {
             var item = f.item();
             var items = f.array([item]);
@@ -410,16 +413,18 @@ class TestSubscriptions extends Test {
             trace = [];
             item.value = 1;
             f.flush();
-            Assert.equals("map", trace.join(","));
+            Assert.equals("item,array,map", trace.join(","));
             Assert.isTrue(f.tracks(items, item));
         });
     }
 
-    function test_MapCurrentlyClearsAnItemsNotifyCallbackAfterItsLastKeyIsRemoved() {
+    function test_MapRemovesOnlyItsOwnForwarderAfterTheLastKeyIsRemoved() {
         for (grouped in [false, true]) withSubscriptions(grouped, f -> {
             var item = f.item();
             var map = f.map();
             var calls = 0;
+            var itemCalls = 0;
+            f.listen(item, _ -> itemCalls++);
             f.listen(cast map, _ -> calls++);
             map.set("first", item);
             map.set("second", item);
@@ -431,10 +436,48 @@ class TestSubscriptions extends Test {
             Assert.equals(1, calls);
             map.remove("second");
             f.flush();
-            Assert.isNull(@:privateAccess item.notifyChanged);
-            var threw = false;
-            try { item.value = 2; } catch (_:Dynamic) { threw = true; }
-            Assert.isTrue(threw);
+            Assert.notNull(@:privateAccess item.notifyChanged);
+            calls = 0;
+            item.value = 2;
+            f.flush();
+            Assert.equals(0, calls);
+            Assert.equals(2, itemCalls);
+        });
+    }
+
+    function test_MapsReleaseAndReattachNestedArraySubscriptionsIndependently() {
+        for (grouped in [false, true]) withSubscriptions(grouped, f -> {
+            var original = f.item();
+            var replacement = f.item();
+            var items = f.array([original]);
+            var first = f.map();
+            var second = f.map();
+            first.set("items", items);
+            second.set("items", items);
+            Assert.isFalse(f.tracks(items, original));
+
+            var firstCalls = 0;
+            var secondCalls = 0;
+            var firstListener = (_:Changes) -> firstCalls++;
+            var secondListener = (_:Changes) -> secondCalls++;
+            f.listen(cast first, firstListener);
+            f.listen(cast second, secondListener);
+            Assert.isTrue(f.tracks(items, original));
+            first.unregisterChangeListener(firstListener);
+            Assert.isTrue(f.tracks(items, original));
+            second.unregisterChangeListener(secondListener);
+            Assert.isFalse(f.tracks(items, original));
+
+            items.set(0, replacement);
+            Assert.isFalse(f.tracks(items, replacement));
+            first.registerChangeListener(firstListener);
+            Assert.isFalse(f.tracks(items, original));
+            Assert.isTrue(f.tracks(items, replacement));
+            original.value = 1;
+            replacement.value = 1;
+            f.flush();
+            Assert.equals(1, firstCalls);
+            Assert.equals(0, secondCalls);
         });
     }
 

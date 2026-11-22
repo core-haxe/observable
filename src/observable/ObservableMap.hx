@@ -14,7 +14,6 @@ abstract ObservableMap<K, V>(ObservableMapImpl<K, V>) {
     private static inline function fromMap<K, V>(map:Map<K, V>):ObservableMap<K, V> {
         var observableMap = new ObservableMap();
         @:privateAccess observableMap._map = map.copy();
-        @:privateAccess observableMap.updateChangeListeners();
         return observableMap;
     }
  
@@ -116,35 +115,27 @@ class ObservableMapImpl<K, V> implements IObservable {
         return removed;
     }
 
-    private function set_changeListeners(value:Array<{listener: Changes->Void}>):Array<{listener: Changes->Void}> {
-        _changeListeners = value;
-        updateChangeListeners();
-        return value;
-    }
-
-    private function updateChangeListeners() {
-        if (_map != null) {
-            for (key in _map.keys()) {
-                var item = _map.get(key);
-                if (item is IObservable) {
-                    @:privateAccess cast(item, IObservable).notifyChanged = this.notifyChanged;
-                    @:privateAccess cast(item, IObservable).changeListeners = _changeListeners;
-                }
-            }
+    private function onObservationChanged(observed:Bool):Void {
+        if (_map == null) return;
+        for (item in _map) {
+            if (observed) attachItem(item);
+            else detachItem(item);
         }
     }
 
+    private function onItemChanged(source:Any, field:String, newValue:Any, oldValue:Any):Void {
+        notifyChanged(source, field, newValue, oldValue);
+    }
+
     private function attachItem(item:V):Void {
-        if (item is IObservable) {
-            @:privateAccess cast(item, IObservable).notifyChanged = this.notifyChanged;
-            @:privateAccess cast(item, IObservable).changeListeners = this.changeListeners;
+        if (item is IObservable && ObservableUtils.hasObservers(this)) {
+            ObservableUtils.addForwarder(cast item, onItemChanged);
         }
     }
 
     private function detachItem(item:V):Void {
         if (item is IObservable) {
-            @:privateAccess cast(item, IObservable).notifyChanged = null;
-            @:privateAccess cast(item, IObservable).changeListeners = null;
+            ObservableUtils.removeForwarder(cast item, onItemChanged);
         }
     }
 

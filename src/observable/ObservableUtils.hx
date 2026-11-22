@@ -54,11 +54,19 @@ class ObservableUtils {
         #end
     }
 
+    public static function hasObservers(observable:IObservable):Bool {
+        var listeners = @:privateAccess observable.changeListeners;
+        if (listeners != null && listeners.length > 0) return true;
+        var dispatcher = _notifyDispatchers.get(observable);
+        return dispatcher != null && dispatcher.listeners.length > 0;
+    }
+
     public static function addForwarder(observable:IObservable, listener:ObservableNotify):Void {
         if (observable == null || listener == null) {
             return;
         }
 
+        var wasObserved = hasObservers(observable);
         var dispatcher = _notifyDispatchers.get(observable);
         if (dispatcher == null) {
             dispatcher = new ObservableNotifyDispatcher(@:privateAccess observable.notifyChanged);
@@ -72,6 +80,9 @@ class ObservableUtils {
             }
         }
         dispatcher.listeners.push(listener);
+        if (!wasObserved) {
+            @:privateAccess observable.onObservationChanged(true);
+        }
     }
 
     public static function removeForwarder(observable:IObservable, listener:ObservableNotify):Void {
@@ -91,15 +102,17 @@ class ObservableUtils {
                 break;
             }
         }
-        if (toRemove != null) {
-            dispatcher.listeners.remove(toRemove);
-        }
+        if (toRemove == null) return;
+        dispatcher.listeners.remove(toRemove);
 
         if (dispatcher.listeners.length == 0) {
             if (isFunctionEqual(@:privateAccess observable.notifyChanged, dispatcher.notifyChanged)) {
                 @:privateAccess observable.notifyChanged = dispatcher.originalNotifyChanged;
             }
             _notifyDispatchers.remove(observable);
+        }
+        if (!hasObservers(observable)) {
+            @:privateAccess observable.onObservationChanged(false);
         }
     }
 }
